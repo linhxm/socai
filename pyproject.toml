@@ -1,0 +1,24 @@
+[project]
+name = "socai"
+version = "0.1.0"
+description = "SổCái — agent hỏi đáp sổ sách tiếng Việt trên dữ liệu bảng bẩn (Zalo AI Challenge 2026 · DataMate)"
+requires-python = ">=3.10"
+dependencies = ["pandas>=2.1", "openpyxl>=3.1", "python-calamine>=0.2"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+docs = ["pdfplumber", "python-docx", "pillow"]  # Track B: PDF, DOCX, ảnh tổng hợp cho OCR
+
+[project.scripts]
+socai = "socai.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

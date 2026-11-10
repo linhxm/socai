@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Kết quả chạy, cache dữ liệu
+runs/
+cache/
+*.log
+
+# Trọng số mô hình, bản build (không đưa lên repo; tải theo hướng dẫn trong README)
+models/
+*.gguf
+*.safetensors
+*.bin
+*.tar
+*.tar.gz
+
+# Dữ liệu cuộc thi (KHÔNG được đưa lên repo)
+train/
+public_test/
+private_test/
+data/
+*.xlsx
+*.sqlite
+questions.jsonl
+answers.jsonl
+submission.jsonl
+
+# Ngoại lệ: dữ liệu tổng hợp do chính code sinh ra (nếu có lưu)
+!training_code/data/synth/**

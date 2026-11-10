@@ -1,0 +1,4 @@
+# Suy luận (đóng gói trong image; vLLM + torch có sẵn trong base image vllm/vllm-openai:v0.10.1.1)
+pandas==2.2.3
+openpyxl==3.1.5
+python-calamine==0.3.1

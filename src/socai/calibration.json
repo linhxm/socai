@@ -1,0 +1,13 @@
+{
+ "threshold": 0.6,
+ "priors": {
+  "fastpath:revenue": 0.9129,
+  "fastpath:avg_order_value": 0.9937,
+  "fastpath:best_day_revenue": 0.9316,
+  "fastpath:order_count": 0.9902,
+  "fastpath:cancelled_count": 0.9857,
+  "fastpath:revenue+pct_change": 0.8776,
+  "fastpath:cancel_rate": 0.9891
+ },
+ "base": 0.9456
+}

@@ -1,0 +1,7 @@
+# Hướng dẫn BTC: KHÔNG được loại dữ liệu huấn luyện; chỉ loại cache và file không dùng.
+**/__pycache__
+**/*.pyc
+.pytest_cache
+runs/
+*.tar
+*.tar.gz

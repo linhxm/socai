@@ -1,0 +1,4 @@
+{
+ "note": "Hold-out theo shop (10/11/2026). Phần viết từ ngày này (find.value, bộ truy vấn, bộ tách câu LLM) chỉ được phát triển và hiệu chỉnh trên dev; hold-out chỉ dùng để đo. Đường luật cũ đã được chỉnh khi nhìn lỗi cả 30 shop nên số của nó trên hold-out vẫn lạc quan.",
+ "holdout": ["biz_105", "biz_111", "biz_113", "biz_118", "biz_120", "biz_123"]
+}

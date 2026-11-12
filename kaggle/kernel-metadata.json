@@ -10,6 +10,6 @@
   "enable_internet": "true",
   "dataset_sources": ["linhxm/socai-data"],
   "competition_sources": [],
-  "kernel_sources": ["linhxm/socai-qwen3-14b-test"],
+  "kernel_sources": ["linhxm/socai-llama-build"],
   "model_sources": []
 }

@@ -8,16 +8,26 @@ Hai thứ này là dữ liệu cuộc thi nên không đưa lên GitHub. Dữ li
 |---|---|---|
 | `run_finetune.py` (mặc định) | Fine-tune LoRA Qwen3-4B rồi đo, so với bản gốc ([mục cuối](#fine-tune-lora-run_finetunepy)) | ~4–5 giờ |
 | `run_14b.py` | Đo Qwen3-14B trên 120 câu hold-out | ~1 giờ |
+| `build_llama.py` | Chỉ dựng `llama-server` để dành (chạy một lần) | ~35 phút |
 
 ## Chuẩn bị (một lần)
 1. **Dataset `socai-data`:** kaggle.com → *Datasets* → *New Dataset* → kéo `socai_data.zip` (129 MB: `train/` + `bank.json`) vào
    → tên `socai-data` → **Private** → *Create*. Chỉ tải lại (*New Version*) khi ngân hàng ví dụ đổi.
-2. Tài khoản Kaggle cần xác minh số điện thoại để bật Internet và GPU.
+2. **Notebook `socai-llama-build`** (dựng llama.cpp để dành, chỉ làm lại khi Kaggle đổi bản CUDA):
+   *New Notebook* → đặt tên `socai-llama-build` → *Accelerator* **GPU T4** (x1 là đủ), *Internet* **On**, không cần Input →
+   một ô code:
+   ```python
+   !rm -rf /kaggle/working/socai && git clone -q https://github.com/linhxm/socai /kaggle/working/socai
+   !python /kaggle/working/socai/kaggle/build_llama.py
+   ```
+   → *Save & Run All (Commit)*. Xong khi log in `XONG` và output có `llama-bin/` (llama-server + các file `.so`,
+   `build_info.json`). Mã nguồn llama.cpp bị xoá khỏi output cho nhẹ.
+3. Tài khoản Kaggle cần xác minh số điện thoại để bật Internet và GPU.
 
 ## Chạy (giao diện web)
 1. *Code* → *New Notebook*. Cột phải: *Accelerator* **GPU T4 x2**, *Internet* **On**.
-2. *Add Input*: dataset `socai-data`; thêm **output của notebook `socai-qwen3-14b-test`** để dùng lại `llama-bin` đã dựng
-   (khỏi dựng 30 phút; không gắn thì script tự dựng).
+2. *Add Input*: dataset `socai-data` + **output của notebook `socai-llama-build`** (*Your Work* → notebook đó) để dùng lại
+   `llama-bin` (khỏi dựng 30 phút; không gắn thì script tự dựng).
 3. Một ô code:
    ```python
    import os

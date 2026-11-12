@@ -368,6 +368,35 @@ def _join_parent(views: list[View]) -> None:
             _set_status_default(w)
 
 
+def _code_from_name(ban: View, views: list[View]) -> None:
+    """Dòng bán chỉ ghi tên → điền ma_hang theo danh mục có cả mã và tên (tên ↔ mã một-một). Nhờ đó nối được các
+    bảng chỉ ghi mã (danh mục thuốc, lô, chi tiết nhập) và xếp hoà theo mã (§9)."""
+    if "ma_hang" not in ban.df or ban.df["ma_hang"].map(clean).ne("").mean() > 0.5:
+        return
+    names = ban.df["mat_hang"].map(fold)
+    nameset = set(names) - {""}
+    if not nameset:
+        return
+    for w in views:
+        keys = _key_cols(w, unique=True)
+        for nc, nvals, ncol in keys:
+            if len(nvals & nameset) < 0.6 * len(nameset):
+                continue
+            code = next((c for c, _, _ in keys if c != nc and w.cols[c].kind == "id"), None)
+            if code is None:
+                continue
+            pairs = {}
+            for n, k in zip(ncol, w.df[code].map(clean)):
+                if n and k:
+                    pairs.setdefault(n, set()).add(k)
+            n2c = {n: next(iter(ks)) for n, ks in pairs.items() if len(ks) == 1}
+            have = ban.df["ma_hang"].map(clean).ne("")
+            ban.df["ma_hang"] = ban.df["ma_hang"].where(have, names.map(n2c).fillna(""))
+            ban.cols["ma_hang"] = Col("ma_hang", "id", f"mã hàng (dòng chỉ ghi tên: lấy theo {w.name}.{code})",
+                                      _samples(ban.df["ma_hang"]))
+            return
+
+
 def _name_from_code(ban: View, views: list[View]) -> None:
     """Bảng chỉ ghi mã hàng (chi tiết nhập, lô) → thêm cột mat_hang theo danh mục bán (để lọc theo tên)."""
     if "ma_hang" not in ban.cols:
@@ -389,22 +418,24 @@ def _join_attributes(ban: View, others: list[View], max_unique: int = 500) -> No
     Chỉ danh mục (mỗi mặt hàng một dòng); bỏ cột gần như duy nhất từng dòng (tên, địa chỉ)."""
     keys = {"ma_hang": set(ban.df["ma_hang"].map(fold)) - {""}, "mat_hang": set(ban.df["mat_hang"].map(fold)) - {""}}
     for v in others:
-        for c, vals, col in _key_cols(v, unique=True):
-            for bk, bset in keys.items():
-                if not bset or len(vals & bset) < 0.6 * len(vals):
-                    continue
-                m = v.df.assign(_k=col).drop_duplicates("_k").set_index("_k")
-                for a, am in v.cols.items():
-                    if a == c or am.kind in ("date", "id") or a == "mat_hang":
-                        continue
-                    if am.kind == "cat" and (m[a].nunique() > max_unique or m[a].nunique() >= 0.95 * len(m)):
-                        continue
-                    name = f"{v.name}.{a}"
-                    if name in ban.cols:
-                        continue
-                    ban.df[name] = ban.df[bk].map(fold).map(m[a])
-                    ban.cols[name] = Col(name, am.kind, f"{am.desc} (nối từ {v.name} theo {bk})", am.samples)
-                break
+        cands = _key_cols(v, unique=True)
+        # mã trước tên: tên hàng có nhiều cách viết (§8), nối theo tên dễ rơi dòng
+        hit = next(((c, col, bk) for bk, bset in keys.items() for c, vals, col in cands
+                    if bset and len(vals & bset) >= 0.6 * len(vals)), None)
+        if hit is None:
+            continue
+        c, col, bk = hit
+        m = v.df.assign(_k=col).drop_duplicates("_k").set_index("_k")
+        for a, am in v.cols.items():
+            if a == c or am.kind in ("date", "id") or a == "mat_hang":
+                continue
+            if am.kind == "cat" and (m[a].nunique() > max_unique or m[a].nunique() >= 0.95 * len(m)):
+                continue
+            name = f"{v.name}.{a}"
+            if name in ban.cols:
+                continue
+            ban.df[name] = ban.df[bk].map(fold).map(m[a])
+            ban.cols[name] = Col(name, am.kind, f"{am.desc} (nối từ {v.name} theo {bk})", am.samples)
 
 
 def build_views(biz: Business, can: Canonical) -> dict[str, View]:
@@ -417,6 +448,7 @@ def build_views(biz: Business, can: Canonical) -> dict[str, View]:
     for dv in debt_views(biz, views.get("don")):
         views[dv.name] = dv
     if "ban" in views:
+        _code_from_name(views["ban"], others)
         _name_from_code(views["ban"], others)
         _join_attributes(views["ban"], others)
     views.update({v.name: v for v in others})

@@ -57,6 +57,13 @@ kaggle kernels output linhxm/socai-finetune -p <thư mục nhận kết quả>
 
 Dựng `llama-server` và tải mô hình mất khoảng 15 phút.
 
+Tham số đo của từng GPU đặt bằng biến môi trường (truyền thẳng cho `scripts/eval_holdout.py`):
+- `ARGS0` (GPU 0, mặc định `--samples 4`): có ngân hàng, bỏ phiếu 4 mẫu.
+- `ARGS1` (GPU 1, mặc định `--no-bank --samples 4`): không ngân hàng (câu kiểu mới), bỏ phiếu 4 mẫu.
+- Thêm `--thinking` để bật chế độ suy nghĩ (chậm hơn nhiều), `--no-gates` để tắt cổng `unanswerable` khi cần so.
+
+Ví dụ ô code: `os.environ["ARGS1"] = "--no-bank --samples 4 --thinking"` đặt trước dòng `!python`.
+
 **Kết quả (trong `/kaggle/working`):**
 | File | Nội dung |
 |---|---|

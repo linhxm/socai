@@ -21,6 +21,7 @@ DESC_RULES: list[tuple[str, str]] = [
     ("so luong nhap don vi co ban", "purchase_qty_base"),
     ("so luong nhap", "purchase_qty"),
     ("so luong da doi ra don vi co ban", "qty_base"),
+    ("so luong co ban", "qty_base"),
     ("so luong", "qty"),
     ("so khach con no cua don", "debt_remaining"),
     ("so khach phai tra cho ca don", "order_total"),
@@ -115,7 +116,27 @@ HEADER_RULES: dict[str, str] = {
     "tongthanhtoan": "order_total", "tong thanh toan": "order_total",
     "sotienthu": "receipt_amount", "so tien thu": "receipt_amount", "tien thu": "receipt_amount",
     "ghi chu": "note",
+    # tên cột tự đặt, gặp ở sổ không có từ điển cột (train)
+    "chi tiet hang": "product_name", "don vi": "unit", "gia niem yet": "unit_price", "khuyen mai": "discount",
+    "thu tu dong": "line_no", "so luong co ban": "qty_base", "gio tao don": "order_time", "gio ban": "order_time",
+    "gio": "order_time", "nguon don": "channel", "nguoi ban": "staff_id", "loai khach hang": "customer_group",
+    "loai khach": "customer_group", "ma hang hoa": "product_code",
 }
+
+# Chữ viết tắt trong tên cột → dạng đầy đủ (tra lại từ điển sau khi bung)
+ABBREV = {"sl": "so luong", "slg": "so luong", "sluong": "so luong", "dv": "don vi", "dvi": "don vi",
+          "kh": "khach hang", "nv": "nhan vien", "ck": "chiet khau", "sp": "san pham", "hh": "hang hoa",
+          "ncc": "nha cung cap", "hd": "hoa don", "pttt": "phuong thuc thanh toan", "sdt": "so dien thoai"}
+_QUALIFIER = {"mua", "ban", "tao", "lap"}  # "mã KH mua", "mã NV bán": từ chỉ vai, bỏ được ở cuối
+
+
+def _expand(f: str) -> str:
+    w = f.split()
+    if w[:2] == ["d", "vi"]:  # "Đ.vị"
+        w = ["dv"] + w[2:]
+    if w[:2] == ["tt", "dong"]:  # "TT dòng" = thứ tự dòng (không phải thành tiền)
+        return " ".join(["thu tu"] + w[1:])
+    return " ".join(ABBREV.get(x, x) for x in w)
 
 
 def tag_from_description(desc: str | None) -> str | None:
@@ -129,6 +150,7 @@ def tag_from_description(desc: str | None) -> str | None:
 
 
 _NOSPACE = {k.replace(" ", ""): v for k, v in HEADER_RULES.items()}
+_DESC_EXACT = {prefix: tag for prefix, tag in reversed(DESC_RULES)}
 
 
 def tag_from_header(col: str) -> str | None:
@@ -137,4 +159,10 @@ def tag_from_header(col: str) -> str | None:
     hit = HEADER_RULES.get(f) or _NOSPACE.get(f.replace(" ", "").replace("_", ""))
     if hit is None and (split := fold(re.sub(r"(?<=[a-z])(?=[A-Z])", " ", str(col)).replace("_", " "))) != f:
         hit = HEADER_RULES.get(split) or tag_from_description(split)
+    if hit is None and f and (e := _expand(f)) != f:  # viết tắt: "SL cơ bản", "Đ.vị", "Mã KH mua"
+        # chỉ khớp NGUYÊN cụm: "Mã HH Liên quan" (mã liên quan) không được thành mã hàng chính
+        hit = HEADER_RULES.get(e) or _DESC_EXACT.get(e)
+        while hit is None and len(e.split()) > 1 and e.split()[-1] in _QUALIFIER:
+            e = e.rsplit(" ", 1)[0]
+            hit = HEADER_RULES.get(e) or _DESC_EXACT.get(e)
     return hit

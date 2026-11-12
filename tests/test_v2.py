@@ -153,3 +153,32 @@ def test_camelcase_headers_reuse_train_lexicon():
     assert [tag_from_header(c) for c in ("KenhBanHang", "PhuongThucTT", "TinhTrang", "MaKhachHang")] == \
         ["channel", "payment_method", "status", "customer_id"]
     assert tag_from_header("IDCuaHang") is None  # không đoán khi từ điển không có
+
+
+def test_header_abbreviations():
+    from socai.semantic.lexicon import tag_from_header
+    got = {h: tag_from_header(h) for h in ["SL cơ bản", "Slg", "Đ.vị", "TT dòng", "Mã KH mua", "Mã NV bán",
+                                           "Chi tiết hàng", "Giờ tạo đơn", "Người bán", "LoaiKhachHang"]}
+    assert got == {"SL cơ bản": "qty_base", "Slg": "qty", "Đ.vị": "unit", "TT dòng": "line_no",
+                   "Mã KH mua": "customer_id", "Mã NV bán": "staff_id", "Chi tiết hàng": "product_name",
+                   "Giờ tạo đơn": "order_time", "Người bán": "staff_id", "LoaiKhachHang": "customer_group"}
+
+
+def test_answerable_gate():
+    import pandas as pd
+
+    from socai.v2.answerable import missing
+    from socai.v2.views import Col, View
+
+    def view(name, cols):
+        df = pd.DataFrame({c: ["x"] for c in cols})
+        return View(name, "", df, {c: Col(c, "cat", c) for c in cols}, None, None, ())
+
+    shop = {"ban": view("ban", ["mat_hang", "thanh_tien", "khach"]), "don": view("don", ["ma_don"])}
+    assert missing("hết hôm nay bia tiger còn lại mấy lon trong kho", shop) is not None  # không có kho
+    assert missing("tháng này khách nữ chiếm bao nhiêu % doanh thu", shop) is not None
+    assert missing("nhân viên nào có tay nghề cao nhất tiệm", shop) is not None
+    assert missing("doanh thu tháng 3/2025 là bao nhiêu", shop) is None  # không nhắc loại thông tin nào
+    assert missing("khách nào mua nhiều nhất tháng này", shop) is None  # shop có ghi khách
+    sqlite = {**shop, "lo_hang": view("lo_hang", ["malo", "hansudung"])}  # tên cột dính liền kiểu SQLite
+    assert missing("lô Oresol gần hết hạn nhất có hạn dùng ngày nào", sqlite) is None

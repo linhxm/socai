@@ -19,6 +19,9 @@ from pathlib import Path
 T0 = time.time()
 BUDGET_MIN = float(os.environ.get("BUDGET_MIN", "0"))  # 0 = không giới hạn (Kaggle tự cắt ở 12 giờ)
 N_PER_SHOP = int(os.environ.get("N_PER_SHOP", "20"))
+# tham số thêm cho eval_holdout.py của từng GPU (vd "--samples 4", "--thinking", "--no-gates")
+ARGS0 = os.environ.get("ARGS0", "--samples 4")
+ARGS1 = os.environ.get("ARGS1", "--no-bank --samples 4")
 W = Path("/kaggle/working")
 MODEL = "qwen3-14b"
 
@@ -240,8 +243,8 @@ def main() -> None:
     env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONPATH=str(code / "src"))
     common = (f"{sys.executable} {code}/scripts/eval_holdout.py --train {train} --cache {W}/cache "
               f"--n-per-shop {N_PER_SHOP}" + (f" --deadline-min {left - 3:.1f}" if BUDGET_MIN else ""))
-    runs = {"bank": f"{common} --llm http://127.0.0.1:8088/v1 --out {W}/h14_bank.json",
-            "nobank": f"{common} --llm http://127.0.0.1:8089/v1 --out {W}/h14_nobank.json --no-bank"}
+    runs = {"bank": f"{common} --llm http://127.0.0.1:8088/v1 --out {W}/h14_bank.json {ARGS0}",
+            "nobank": f"{common} --llm http://127.0.0.1:8089/v1 --out {W}/h14_nobank.json {ARGS1}"}
     procs = {k: subprocess.Popen(v, shell=True, env=env, stdout=open(W / f"eval_{k}.log", "w"),
                                  stderr=subprocess.STDOUT) for k, v in runs.items()}
     log(f"đang đo, {'hạn %.0f phút' % (left - 3) if BUDGET_MIN else 'không giới hạn giờ'}, "
@@ -256,6 +259,7 @@ def main() -> None:
         f = W / f"h14_{k}.json"
         out[k] = json.loads(f.read_text(encoding="utf-8"))["summary"] if f.exists() else None
     (W / "summary.json").write_text(json.dumps({"model": MODEL, "gguf": gguf.name, "n_per_shop": N_PER_SHOP,
+                                                "args": {"bank": ARGS0, "nobank": ARGS1},
                                                 "minutes": round((time.time() - T0) / 60, 1), **out},
                                                ensure_ascii=False, indent=1), encoding="utf-8")
     log("TỔNG KẾT " + json.dumps(out, ensure_ascii=False))

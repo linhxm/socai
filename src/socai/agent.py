@@ -9,6 +9,7 @@ code (code sinh ra đã chạy, hoặc 'file::hàm' cho hàm đóng gói), input
 
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass, field
 from datetime import date
@@ -31,6 +32,7 @@ from socai.rules.calendar import LunarCalendar
 from socai.rules.rulebook import Rulebook
 from socai.rules.timeexpr import Resolver, TimeSpec
 from socai.semantic.canonical import Canonical, build
+from socai.v2 import answerable
 from socai.v2 import brain as v2_brain
 from socai.v2.algebra import Ctx
 from socai.v2.bank import Bank
@@ -51,6 +53,10 @@ class AgentConfig:
     max_tokens: int = 2048
     max_repairs: int = 1
     code_timeout_s: float = 60.0
+    use_gates: bool = True  # cổng §7: kỳ ngoài dữ liệu / shop không ghi loại thông tin → unanswerable
+    n_samples: int = 1  # > 1: lấy nhiều mẫu biểu thức, chạy hết, bỏ phiếu theo kết quả (thay cho second_opinion)
+    v2_thinking: bool = False  # Qwen3 chế độ suy nghĩ khi ghép biểu thức (14B trên máy chấm)
+    sample_temperature: float = 0.7
 
 
 @dataclass
@@ -91,6 +97,22 @@ class Agent:
     def close(self, s: Session) -> None:
         if s.worker is not None:
             s.worker.close()
+
+    # ------------------------------------------------------------------ cổng §7 (trước mọi đường)
+    def _gate(self, s: Session, q: str, spec: TimeSpec, log: dict) -> Candidate | None:
+        """Không trả lời được, kết luận bằng dữ liệu (không cần LLM): kỳ hỏi hoặc kỳ so sánh nằm hoàn toàn ngoài
+        khoảng dữ liệu, hoặc câu cần loại thông tin mà shop không ghi. Đo trên dev: không chặn nhầm câu nào."""
+        why, src = None, None
+        if spec.main is not None and M.coverage(s.can, spec.main) == "outside":
+            why, src = "kỳ hỏi nằm ngoài khoảng dữ liệu (§7)", "gate_time"
+        elif spec.compare_to is not None and M.coverage(s.can, spec.compare_to) == "outside":
+            why, src = "kỳ so sánh nằm ngoài khoảng dữ liệu (§7)", "gate_time"
+        elif (r := answerable.missing(q, s.views)) is not None:
+            why, src = r, "gate_facet"
+        if why is None:
+            return None
+        log["code"], log["inputs"], log["output"] = "socai/agent.py::_gate", {"source": src}, why
+        return Candidate(normalize({"type": "unanswerable", "answer": None, "reason": why}), src, "unanswerable")
 
     # ------------------------------------------------------------------ đường 1
     def _fastpath(self, s: Session, q: str, spec: TimeSpec, log: dict) -> Candidate | None:
@@ -154,6 +176,8 @@ class Agent:
         resolver = Resolver(today, self.calendar)
         ctx = Ctx(s.views, spec, resolver.resolve, plan_mod._series_periods, today=today)
         ex = s.biz.biz_id if self.cfg.bank_lbo else None
+        if self.cfg.n_samples > 1:
+            return self._v2_vote(s, q, spec, today, resolver, ex, log)
         th = v2_brain.think(self.llm, s.views, q, ctx, max_repairs=self.cfg.max_repairs, bank=self.bank,
                             exclude_biz=ex)
         log.setdefault("thinking_list", []).extend(th.reasoning)
@@ -179,6 +203,38 @@ class Agent:
         if log.get("code") is None:
             log["code"], log["inputs"], log["output"] = "socai/v2/algebra.py::execute", th.expr, r.value
         return Candidate(ans, "v2", th.sig, trace=r.trace)
+
+    def _v2_vote(self, s: Session, q: str, spec: TimeSpec, today: date, resolver: Resolver, ex: str | None,
+                 log: dict) -> Candidate | None:
+        """k mẫu: greedy, greedy với bộ ví dụ khác, rồi các mẫu có nhiệt độ (seed cố định → tái lập). Chạy hết,
+        bỏ phiếu theo KẾT QUẢ chạy (research: C3, MBR-exec). Mức đồng thuận → nhãn đã hiệu chỉnh của v2:
+        tất cả cùng đáp án → v2_agree; quá nửa → v2_differ; còn lại → v2_alone."""
+        k = self.cfg.n_samples
+        plan = [(0, 0.0, None), (4, 0.0, None)] + [(0, self.cfg.sample_temperature, i) for i in range(1, k - 1)]
+        votes: dict[str, list] = {}
+        samples = []
+        for i, (skip, temp, seed) in enumerate(plan[:k]):
+            ctx = Ctx(s.views, spec, resolver.resolve, plan_mod._series_periods, today=today)
+            th = v2_brain.think(self.llm, s.views, q, ctx, max_repairs=self.cfg.max_repairs if i == 0 else 0,
+                                bank=self.bank, exclude_biz=ex, skip=skip, thinking=self.cfg.v2_thinking,
+                                temperature=temp, seed=seed)
+            log.setdefault("thinking_list", []).extend(th.reasoning)
+            r = th.result
+            ans = normalize({"type": r.type, "answer": r.value, "reason": r.reason}) if r is not None else None
+            samples.append({"expr": th.expr, "problem": th.problem, "answer": ans})
+            if ans is not None:
+                votes.setdefault(json.dumps(ans, sort_keys=True, ensure_ascii=False), []).append((i, th, ans))
+        log["v2"] = {"samples": samples, "votes": {key: len(v) for key, v in votes.items()}}
+        if not votes:
+            return None
+        # nhiều phiếu nhất; hoà thì theo mẫu đến trước (mẫu 0 là greedy)
+        key, group = max(votes.items(), key=lambda kv: (len(kv[1]), -kv[1][0][0]))
+        m = len(group)
+        label = "agree" if m == k else ("differ" if m > k / 2 else "alone")
+        _, th, ans = group[0]
+        log["v2"].update({"expr": th.expr, "sig": th.sig, "agree": f"{m}/{k}"})
+        log["code"], log["inputs"], log["output"] = "socai/v2/algebra.py::execute", th.expr, th.result.value
+        return Candidate(ans, f"v2_{label}", th.sig, trace=th.result.trace)
 
     # ------------------------------------------------------------------ đường 3: LLM viết code (tắt mặc định)
     def _llm_code(self, s: Session, q: str, today: date, spec: TimeSpec, log: dict) -> Candidate | None:
@@ -218,7 +274,9 @@ class Agent:
                             if spec.compare_to else None, "ambiguous": spec.ambiguous}
         cands = []
         try:
-            if (c := self._fastpath(s, question, spec, log)) is not None:
+            if self.cfg.use_gates and (g := self._gate(s, question, spec, log)) is not None:
+                cands.append(g)
+            elif (c := self._fastpath(s, question, spec, log)) is not None:
                 cands.append(c)
             if self.cfg.use_llm and self.cfg.use_v2 and (not cands or self.cfg.verify_fastpath):
                 if (c := self._v2(s, question, today, spec, log)) is not None:

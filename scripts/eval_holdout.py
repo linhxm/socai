@@ -64,6 +64,9 @@ def main() -> None:
     ap.add_argument("--deadline-min", type=float, default=0, help="dừng nhận câu mới sau ngần ấy phút (0 = không)")
     ap.add_argument("--no-bank", action="store_true", help="không truy hồi ví dụ: chỉ ví dụ viết tay (đo câu kiểu mới)")
     ap.add_argument("--no-second", action="store_true")
+    ap.add_argument("--samples", type=int, default=1, help="> 1: k mẫu biểu thức, bỏ phiếu theo kết quả chạy")
+    ap.add_argument("--thinking", action="store_true", help="Qwen3 chế độ suy nghĩ khi ghép biểu thức")
+    ap.add_argument("--no-gates", action="store_true", help="tắt cổng §7 (để so)")
     a = ap.parse_args()
 
     t_end = time.time() + a.deadline_min * 60 if a.deadline_min else float("inf")
@@ -73,7 +76,8 @@ def main() -> None:
     bank = None if a.no_bank else Bank.load(ROOT / "src" / "socai" / "v2" / "bank.json")
     ag = Agent(Rulebook.load(a.train / "rulebook.md"), LunarCalendar.load(a.train / "calendar.csv"),
                Policy.load(ROOT / "src" / "socai" / "calibration.json"), VllmClient(base_url=a.llm, timeout=600),
-               AgentConfig(use_llm=True, use_v2=True, second_opinion=not (a.no_second or a.no_bank)), a.cache,
+               AgentConfig(use_llm=True, use_v2=True, second_opinion=not (a.no_second or a.no_bank),
+                           n_samples=a.samples, v2_thinking=a.thinking, use_gates=not a.no_gates), a.cache,
                a.train / "calendar.csv", bank=bank)
     rows, sessions, t0 = [], {}, time.time()
     a.out.parent.mkdir(parents=True, exist_ok=True)

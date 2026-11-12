@@ -55,6 +55,7 @@ Nộp bài: Docker theo hướng dẫn của BTC, xem `docker/Dockerfile`, `pred
 - [docs/chung.md](docs/chung.md): đề bài, ràng buộc, dữ liệu, phần tất định dùng chung, mô hình và hạ tầng, nộp bài, Track B
 - [docs/v1.md](docs/v1.md): đường luật + kế hoạch 4B, số đo và giới hạn dẫn tới v2
 - [docs/v2.md](docs/v2.md): đại số truy vấn, ngân hàng ví dụ, kết quả 4B/14B, việc tiếp theo
+- [docs/v3.md](docs/v3.md): research (paper, repo đội khác), chỗ mất điểm, kiến trúc và kế hoạch v3 (mục tiêu PA public = 1)
 - [kaggle/README.md](kaggle/README.md): chạy 14B trên Kaggle · [training_code/README.md](training_code/README.md): ngân hàng ví dụ, fine-tune
 
 ## Không có trong repo

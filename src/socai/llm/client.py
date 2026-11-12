@@ -29,7 +29,7 @@ class LLM(Protocol):
     model: str
 
     def chat(self, messages: list[dict], *, max_tokens: int = 2048, json_schema: dict | None = None,
-             thinking: bool = False) -> Call: ...
+             thinking: bool = False, temperature: float = 0.0, seed: int | None = None) -> Call: ...
 
 
 @dataclass
@@ -41,9 +41,11 @@ class VllmClient:
     api_key: str | None = None  # chỉ dùng khi phát triển với server có khoá; bài thi chạy offline không cần
 
     def chat(self, messages: list[dict], *, max_tokens: int = 2048, json_schema: dict | None = None,
-             thinking: bool = False) -> Call:
+             thinking: bool = False, temperature: float = 0.0, seed: int | None = None) -> Call:
+        # temperature > 0 chỉ dùng cho mẫu phụ khi bỏ phiếu; seed cố định theo mẫu → vẫn tái lập (Rule 8)
         body: dict = {"model": self.model, "messages": messages, "max_tokens": max_tokens,
-                      "temperature": 0.0, "top_p": 1.0, "seed": self.seed,
+                      "temperature": temperature, "top_p": 1.0 if temperature == 0 else 0.95,
+                      "seed": self.seed if seed is None else seed,
                       # Qwen3: bật/tắt chế độ suy nghĩ qua chat template
                       "chat_template_kwargs": {"enable_thinking": thinking}}
         if json_schema is not None:
@@ -80,7 +82,7 @@ class FakeLLM:
     calls: list[list[dict]] = field(default_factory=list)
 
     def chat(self, messages: list[dict], *, max_tokens: int = 2048, json_schema: dict | None = None,
-             thinking: bool = False) -> Call:
+             thinking: bool = False, temperature: float = 0.0, seed: int | None = None) -> Call:
         self.calls.append(messages)
         return Call(self.responder(messages) if self.responder else "", None)
 

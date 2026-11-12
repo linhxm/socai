@@ -280,7 +280,7 @@ def _static_bank() -> Bank:
 
 def think(llm: LLM, views: dict[str, View], question: str, ctx: Ctx, max_repairs: int = 1,
           max_tokens: int = 320, bank: Bank | None = None, exclude_biz: str | None = None, k: int = 8,
-          skip: int = 0) -> Thought:
+          skip: int = 0, thinking: bool = False, temperature: float = 0.0, seed: int | None = None) -> Thought:
     """`skip` > 0: bỏ qua `skip` ví dụ giống nhất (dùng để lấy ý kiến thứ hai từ bộ ví dụ khác)."""
     th = Thought()
     if bank is None:  # không có ngân hàng: vẫn truy hồi, nhưng chỉ trong ví dụ viết tay (giữ prompt trong ngữ cảnh)
@@ -294,7 +294,8 @@ def think(llm: LLM, views: dict[str, View], question: str, ctx: Ctx, max_repairs
     th.shots = [s.id for s in shots] if shots else []
     msgs = messages(pick_views(views, question), question, shots)
     for _ in range(1 + max_repairs):
-        call = llm.chat(msgs, max_tokens=max_tokens, thinking=False)
+        call = llm.chat(msgs, max_tokens=max_tokens + (2048 if thinking else 0), thinking=thinking,
+                        temperature=temperature, seed=seed)
         th.reasoning.append(call.reasoning)
         expr = extract_json(call.content)
         th.attempts.append({"raw": call.content[:600], "expr": expr})

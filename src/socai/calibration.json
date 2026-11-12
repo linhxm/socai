@@ -69,7 +69,9 @@
   "v2_alone:unanswerable": 0.7421,
   "v2_alone:unique:value": 0.7421,
   "v2_alone:count:count": 0.5754,
-  "v2_alone:pct:sum:value": 0.7421
+  "v2_alone:pct:sum:value": 0.7421,
+  "gate_time": 0.97,
+  "gate_facet": 0.95
  },
  "base": 0.9456,
  "note": "priors đo trên 24 shop dev (11/11/2026), co về trung bình với shrink=10; ngưỡng 0,5 = điểm hoà vốn của PA",

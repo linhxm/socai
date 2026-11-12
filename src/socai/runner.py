@@ -15,6 +15,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 
+from socai.v2.bank import Bank
 from socai.agent import Agent, AgentConfig
 from socai.answer.decide import Policy
 from socai.llm.client import LLM
@@ -50,7 +51,8 @@ def run(data: Path, out: Path, llm: LLM | None, agent_cfg: AgentConfig, run_cfg:
     cal_path = data / "calendar.csv"
     agent = Agent(Rulebook.load(data / "rulebook.md"),
                   LunarCalendar.load(cal_path) if cal_path.exists() else None,
-                  Policy.load(policy_path), llm, agent_cfg, cache_dir, cal_path if cal_path.exists() else None)
+                  Policy.load(policy_path), llm, agent_cfg, cache_dir, cal_path if cal_path.exists() else None,
+                  bank=Bank.load(Path(__file__).parent / "v2" / "bank.json") if agent_cfg.use_v2 else None)
     stats = {"n": len(questions), "answered": 0, "abstain": 0, "unanswerable": 0, "errors": 0}
     done: set[str] = set()
     with (out / "submission.jsonl").open("w", encoding="utf-8") as fs, \

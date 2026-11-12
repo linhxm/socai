@@ -31,6 +31,7 @@ class Readme:
     conventions: list[str] = field(default_factory=list)
     data_end: date | None = None
     units: list[UnitRule] = field(default_factory=list)
+    notes: dict[str, str] = field(default_factory=dict)  # cột → mô tả lấy từ câu quy ước
 
     def known_headers(self) -> set[str]:
         return {fold(c) for cols in self.columns.values() for c in cols}
@@ -44,13 +45,16 @@ class Readme:
             if cols and column in cols:
                 return cols[column]
         hits = {d for cols in self.columns.values() for c, d in cols.items() if c == column}
-        return hits.pop() if len(hits) == 1 else None
+        if len(hits) == 1:
+            return hits.pop()
+        return self.notes.get(column)  # câu quy ước "**Cột** là …" (vd công nợ, nhập hàng)
 
 
 _RE_SECTION = re.compile(r"^##\s+(.+)$", re.M)
 _RE_COLS_HEAD = re.compile(r"Cột trong [`'\"]?([^`'\"]+)[`'\"]?", re.I)
 _RE_COL = re.compile(r"^-\s+\*\*(.+?)\*\*\s*:\s*(.+)$")
 _RE_UNIT = re.compile(r"^\s*-\s+(.+?):\s*1\s+(.+?)\s*=\s*([\d.,]+)\s+(.+?)\s*$")
+_RE_NOTE = re.compile(r"(?:\*\*([^*]+)\*\*|`(?:\w+\.)?(\w+)`)\s+là\s+([^;.`*]+)")
 _RE_END = re.compile(r"đến hết\s+(\d{1,2}/\d{1,2}/\d{4})")
 
 
@@ -72,6 +76,9 @@ def parse_readme(text: str) -> Readme:
                     cols[c.group(1).strip()] = c.group(2).strip()
         elif fold(head).startswith("quy uoc") or fold(head).startswith("bang"):
             rd.conventions.extend(ln.strip() for ln in lines if ln.strip())
+    for ln in text.splitlines():  # "**Giá trị** là số tiền trả lần đó; `bang.Cot` là …"
+        for m2 in _RE_NOTE.finditer(ln):
+            rd.notes.setdefault((m2.group(1) or m2.group(2)).strip(), m2.group(3).strip())
     if (m := _RE_END.search(text)) is not None:
         rd.data_end = parse_date(m.group(1))
     for ln in text.splitlines():

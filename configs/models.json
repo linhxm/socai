@@ -1,0 +1,21 @@
+{
+ "_note": "Hồ sơ LLM. Đổi mô hình: SOCAI_MODEL=<tên> hoặc --model <tên>. Tham số tính theo bản gốc (quantization không giảm số tham số được tính, Rule ≤ 15B). Revision cần ghi cố định trước khi nộp.",
+ "qwen3-4b": {
+  "hf_repo": "Qwen/Qwen3-4B-GGUF",
+  "gguf": "Qwen3-4B-Q4_K_M.gguf",
+  "params_b": 4.02,
+  "ctx": 4096,
+  "server_args": ["-b", "512", "-ub", "256", "-ctk", "q8_0", "-ctv", "q8_0"],
+  "min_vram_gb": 4,
+  "note": "laptop RTX 3050 Ti 4 GB: tràn VRAM ở prompt ~3.800 token, giữ prompt < 3K"
+ },
+ "qwen3-14b": {
+  "hf_repo": "Qwen/Qwen3-14B-GGUF",
+  "gguf": "Qwen3-14B-Q4_K_M.gguf",
+  "params_b": 14.77,
+  "ctx": 8192,
+  "server_args": ["-b", "1024", "-ub", "512"],
+  "min_vram_gb": 12,
+  "note": "một GPU 16 GB (T4) chứa đủ bản Q4_K_M + KV 8K; laptop 4 GB không chạy được"
+ }
+}

@@ -1,0 +1,15 @@
+{
+  "id": "linhxm/socai-finetune",
+  "title": "socai finetune",
+  "code_file": "launcher.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_tpu": "false",
+  "enable_internet": "true",
+  "dataset_sources": ["linhxm/socai-data"],
+  "competition_sources": [],
+  "kernel_sources": ["linhxm/socai-qwen3-14b-test"],
+  "model_sources": []
+}

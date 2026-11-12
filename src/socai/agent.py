@@ -31,12 +31,19 @@ from socai.rules.calendar import LunarCalendar
 from socai.rules.rulebook import Rulebook
 from socai.rules.timeexpr import Resolver, TimeSpec
 from socai.semantic.canonical import Canonical, build
+from socai.v2 import brain as v2_brain
+from socai.v2.algebra import Ctx
+from socai.v2.bank import Bank
+from socai.v2.views import View, build_views
 
 
 @dataclass
 class AgentConfig:
     use_llm: bool = True
-    use_plan: bool = True  # LLM tách câu → kế hoạch → lệnh cơ bản tất định
+    use_plan: bool = True  # LLM tách câu → kế hoạch → lệnh cơ bản tất định (v1)
+    use_v2: bool = False  # LLM ghép biểu thức đại số (v2); bật thì thay cho use_plan
+    bank_lbo: bool = False  # khi đo trên train: không lấy ví dụ của chính shop đang hỏi
+    second_opinion: bool = False  # hỏi lại với bộ ví dụ khác; hai lần khác đáp án thì hạ độ tin
     use_codegen: bool = False  # LLM tự viết code: tắt với 4B (đo được 0/23 trên laptop)
     llm_tagging: bool = True  # LLM gán nghĩa cột còn thiếu (kiểm lại bằng dữ liệu)
     verify_fastpath: bool = False
@@ -53,6 +60,7 @@ class Session:
     names: set[str]
     index: EntityIndex | None = None
     worker: CodeWorker | None = None
+    views: dict[str, View] = field(default_factory=dict)
 
 
 @dataclass
@@ -64,6 +72,7 @@ class Agent:
     cfg: AgentConfig = field(default_factory=AgentConfig)
     cache_dir: Path | None = None
     calendar_path: Path | None = None
+    bank: Bank | None = None  # ví dụ đã kiểm chứng từ train (v2/bank.json)
 
     def open(self, biz_dir: Path) -> Session:
         biz = load_business(biz_dir, self.cache_dir)
@@ -77,7 +86,7 @@ class Agent:
         if can.lines is not None:
             for c in ("product_name", "customer_name"):
                 names |= {f for x in can.lines[c].unique() if len((f := fold(x)).split()) >= 2}
-        return Session(biz, can, names, EntityIndex(can))
+        return Session(biz, can, names, EntityIndex(can), views=build_views(biz, can) if self.cfg.use_v2 else {})
 
     def close(self, s: Session) -> None:
         if s.worker is not None:
@@ -138,6 +147,39 @@ class Agent:
         key = f"{plan.spec.measure}:{plan.spec.shape}"
         return Candidate(ans, "llm_plan", key, trace=r.trace)
 
+    # ------------------------------------------------------------------ đường 2 (v2): ghép biểu thức đại số
+    def _v2(self, s: Session, q: str, today: date, spec: TimeSpec, log: dict) -> Candidate | None:
+        if self.llm is None or not s.views:
+            return None
+        resolver = Resolver(today, self.calendar)
+        ctx = Ctx(s.views, spec, resolver.resolve, plan_mod._series_periods, today=today)
+        ex = s.biz.biz_id if self.cfg.bank_lbo else None
+        th = v2_brain.think(self.llm, s.views, q, ctx, max_repairs=self.cfg.max_repairs, bank=self.bank,
+                            exclude_biz=ex)
+        log.setdefault("thinking_list", []).extend(th.reasoning)
+        log["v2"] = {"expr": th.expr, "attempts": th.attempts, "problem": th.problem, "sig": th.sig,
+                     "shots": th.shots}
+        if th.result is None:
+            return None
+        r = th.result
+        ans = normalize({"type": r.type, "answer": r.value, "reason": r.reason})
+        if ans is None:
+            return None
+        if self.cfg.second_opinion and self.bank is not None:
+            ctx2 = Ctx(s.views, spec, resolver.resolve, plan_mod._series_periods, today=today)
+            th2 = v2_brain.think(self.llm, s.views, q, ctx2, max_repairs=0, bank=self.bank, exclude_biz=ex, skip=4)
+            log.setdefault("thinking_list", []).extend(th2.reasoning)
+            a2 = normalize({"type": th2.result.type, "answer": th2.result.value, "reason": th2.result.reason}) \
+                if th2.result is not None else None
+            log["v2"]["second"] = {"expr": th2.expr, "problem": th2.problem, "agree": a2 == ans}
+            agree = "agree" if a2 == ans else ("alone" if a2 is None else "differ")
+            if log.get("code") is None:
+                log["code"], log["inputs"], log["output"] = "socai/v2/algebra.py::execute", th.expr, r.value
+            return Candidate(ans, f"v2_{agree}", th.sig, trace=r.trace)
+        if log.get("code") is None:
+            log["code"], log["inputs"], log["output"] = "socai/v2/algebra.py::execute", th.expr, r.value
+        return Candidate(ans, "v2", th.sig, trace=r.trace)
+
     # ------------------------------------------------------------------ đường 3: LLM viết code (tắt mặc định)
     def _llm_code(self, s: Session, q: str, today: date, spec: TimeSpec, log: dict) -> Candidate | None:
         if self.llm is None:
@@ -178,7 +220,10 @@ class Agent:
         try:
             if (c := self._fastpath(s, question, spec, log)) is not None:
                 cands.append(c)
-            if self.cfg.use_llm and self.cfg.use_plan and (not cands or self.cfg.verify_fastpath):
+            if self.cfg.use_llm and self.cfg.use_v2 and (not cands or self.cfg.verify_fastpath):
+                if (c := self._v2(s, question, today, spec, log)) is not None:
+                    cands.append(c)
+            elif self.cfg.use_llm and self.cfg.use_plan and (not cands or self.cfg.verify_fastpath):
                 if (c := self._llm_plan(s, question, today, spec, log)) is not None:
                     cands.append(c)
             if self.cfg.use_llm and self.cfg.use_codegen and not cands:

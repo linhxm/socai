@@ -20,7 +20,7 @@ ROLE_RULES: list[tuple[str, set[str], set[str]]] = [
     ("order_lines", {"order_id", "line_amount"}, {"purchase_id"}),
     ("order_lines", {"product_name", "line_amount"}, {"purchase_id"}),
     ("order_lines", {"order_id", "product_code", "qty"}, {"purchase_id"}),
-    ("payments", {"order_id", "receipt_amount"}, set()),
+    ("payments", {"order_id", "receipt_amount"}, {"order_total", "status", "goods_total"}),  # bảng đơn có cột "khách đã trả" vẫn là bảng đơn
     ("orders", {"order_id", "status"}, {"product_name", "product_code"}),
     ("orders", {"order_id", "order_total"}, {"product_name", "product_code"}),
     ("purchase_lines", {"purchase_id", "product_code"}, set()),

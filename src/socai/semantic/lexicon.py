@@ -7,6 +7,8 @@ Thứ tự quan trọng: cụm cụ thể đứng trước cụm tổng quát ("
 
 from __future__ import annotations
 
+import re
+
 from socai.io.cells import fold
 
 # (tiền tố mô tả đã fold, tag)
@@ -22,6 +24,7 @@ DESC_RULES: list[tuple[str, str]] = [
     ("so luong", "qty"),
     ("so khach con no cua don", "debt_remaining"),
     ("so khach phai tra cho ca don", "order_total"),
+    ("so tien tra lan do", "receipt_amount"),
     ("so khach cua don", "guests"),
     ("so ngay duoc no", "credit_days"),
     ("so dien thoai", "phone"),
@@ -101,7 +104,9 @@ HEADER_RULES: dict[str, str] = {
     "thanh tien": "line_amount", "trigia": "line_amount",
     "don gia": "unit_price", "dongia": "unit_price",
     "ngay ban": "order_date", "ngay": "order_date", "ngayban": "order_date",
-    "trang thai": "status", "trangthai": "status",
+    "trang thai": "status", "trangthai": "status", "tinh trang": "status", "tinhtrang": "status",
+    "tinh trang don": "status", "phuong thuc tt": "payment_method", "phuong thuc thanh toan": "payment_method", "phuong thuc": "payment_method",
+    "kenh ban": "channel", "ban qua": "channel", "loai ban": "channel",
     "khach hang": "customer_name", "ten khach hang": "customer_name",
     "ma khach hang": "customer_id", "makh": "customer_id",
     "nhom hang": "product_group", "nhom khach hang": "customer_group",
@@ -123,5 +128,13 @@ def tag_from_description(desc: str | None) -> str | None:
     return None
 
 
+_NOSPACE = {k.replace(" ", ""): v for k, v in HEADER_RULES.items()}
+
+
 def tag_from_header(col: str) -> str | None:
-    return HEADER_RULES.get(fold(col)) or HEADER_RULES.get(fold(col).replace(" ", ""))
+    """Tên cột thường, hoặc viết dính kiểu SQLite/CamelCase ("KenhBanHang" ~ "kenh ban hang")."""
+    f = fold(col)
+    hit = HEADER_RULES.get(f) or _NOSPACE.get(f.replace(" ", "").replace("_", ""))
+    if hit is None and (split := fold(re.sub(r"(?<=[a-z])(?=[A-Z])", " ", str(col)).replace("_", " "))) != f:
+        hit = HEADER_RULES.get(split) or tag_from_description(split)
+    return hit

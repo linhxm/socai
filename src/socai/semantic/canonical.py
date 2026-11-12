@@ -8,11 +8,11 @@ bảng thô. Mọi luật áp ở đây đều trích từ rulebook §1, §8 và
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime, time
 
 import pandas as pd
 
-from socai.io.cells import clean, fold, parse_date, parse_datetime, parse_number, parse_qty
+from socai.io.cells import clean, fold, parse_date, parse_datetime, parse_number, parse_qty, parse_time
 from socai.profile.business import Business, Table
 
 STATUS_RULES: list[tuple[tuple[str, ...], str]] = [
@@ -168,6 +168,10 @@ def _typed_lines(df: pd.DataFrame) -> pd.DataFrame:
     dt = [parse_datetime(a, y if pd.notna(y) else None) for a, y in zip(df["order_datetime"], yr)]
     d = [parse_date(a, y if pd.notna(y) else None) for a, y in zip(df["order_date"], yr)]
     out["d"] = [x or (t.date() if t else None) for x, t in zip(d, dt)]
+    if df["order_time"].notna().any():  # giờ ghi ở cột riêng ("Giờ"): ghép với ngày đặt
+        tm = [parse_time(v) for v in df["order_time"]]
+        dt = [t if (t is not None and t.time() != time()) or x is None or h is None else datetime.combine(x, h)
+              for t, x, h in zip(dt, out["d"], tm)]
     out["dt"] = dt
     out["status"] = df["status"].map(norm_status)
     if out["status"].eq("").all() and df["note"].notna().any():  # sổ không có cột trạng thái → Ghi chú

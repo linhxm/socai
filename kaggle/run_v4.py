@@ -86,8 +86,23 @@ def main() -> None:
                "--cache", str(W / "cache"), *ARGS.split()]
         log("$ " + " ".join(cmd))
         procs.append(subprocess.Popen(cmd, env=env, stdout=open(W / f"v4_gpu{g}.log", "w"), stderr=subprocess.STDOUT))
-    for p in procs:
-        p.wait()
+    import time
+    last = time.time()
+    while any(p.poll() is None for p in procs):  # in tiến độ mỗi 60 giây (stdout tiến trình con ghi vào file log)
+        time.sleep(5)
+        if time.time() - last < 60:
+            continue
+        last = time.time()
+        for g in range(len(procs)):
+            sub = out / f"gpu{g}" / "submission.jsonl"
+            n = sum(1 for _ in open(sub, encoding="utf-8")) if sub.exists() else 0
+            lf = W / f"v4_gpu{g}.log"
+            tail = lf.read_text(encoding="utf-8", errors="replace").strip().splitlines()[-1:] if lf.exists() else []
+            log(f"GPU{g}: {n} câu xong · {tail[0][:150] if tail else '(chưa có log)'}")
+    for g, p in enumerate(procs):
+        if p.returncode:
+            log(f"GPU{g} thoát với mã {p.returncode}; cuối log:")
+            print((W / f"v4_gpu{g}.log").read_text(encoding="utf-8", errors="replace")[-3000:], flush=True)
     # gộp hai nửa
     (out / "logs").mkdir(parents=True, exist_ok=True)
     for name in ("submission.jsonl", "logs/log.jsonl", "logs/shops.jsonl"):

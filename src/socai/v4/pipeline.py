@@ -157,6 +157,7 @@ def run(data: Path, out: Path, llm: LLM | None, cfg: Config, shops: list[str] | 
             trace: list = []
             t0 = time.time()
             try:
+                print(f"[{time.time() - t_start:7.0f}s] {biz}: dựng L1+L2 ({len(items)} câu)", flush=True)
                 sess, tables = run_l1(data / "data" / biz, llm, trace)
                 model = build_model(biz, tables, sess.readme.intro + " " + " ".join(sess.readme.conventions),
                                     rules.industries, llm, trace)
@@ -166,6 +167,8 @@ def run(data: Path, out: Path, llm: LLM | None, cfg: Config, shops: list[str] | 
                     _write(fs, {"id": q["id"], "type": "abstain"})
                     done.add(q["id"])
                 continue
+            print(f"[{time.time() - t_start:7.0f}s] {biz}: xong L1+L2 sau {time.time() - t0:.0f}s, "
+                  f"{len(model.views)} bảng, ngành={model.industry or '-'}", flush=True)
             _write(fsh, {"shop": biz, "seconds": round(time.time() - t0, 1), "industry": model.industry,
                          "date_range": model.date_range, "views": {k: {"role": v.role, "rows": v.rows,
                                                                        "per_order": v.per_order, "notes": v.notes}
@@ -181,6 +184,8 @@ def run(data: Path, out: Path, llm: LLM | None, cfg: Config, shops: list[str] | 
                 done.add(q["id"])
                 k = sub["type"] if sub["type"] in ("abstain", "unanswerable") else "answered"
                 stats[k] += 1
+                print(f"[{time.time() - t_start:7.0f}s] {biz} {len(done)}/{len(qs)} {sub['type']:12s} "
+                      f"{log['elapsed_ms'] / 1000:5.1f}s {q['question'][:60]}", flush=True)
         for q in qs:
             if q["id"] not in done:
                 _write(fs, {"id": q["id"], "type": "abstain"})

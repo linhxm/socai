@@ -26,9 +26,10 @@ def _llms(urls: str | None, model: str):
     for u in (urls or "").split(","):
         if u.strip():
             c = VllmClient(base_url=u.strip(), model=model)
-            if not c.ready():
-                sys.exit(f"không kết nối được LLM ở {u}")
-            out.append(c)
+            if c.ready():
+                out.append(c)
+            else:  # vẫn chạy để ghi đủ submission.jsonl (câu không có LLM thì bỏ trống)
+                print(f"[v5] không kết nối được LLM ở {u}, bỏ server này", flush=True)
     return out
 
 
@@ -51,7 +52,9 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--bank", type=Path, default=HERE / "bank.json")
     p.add_argument("--bank-exclude-own", action="store_true", help="đo trên train: không lấy ví dụ của chính shop")
     p.add_argument("--budget-min", type=float, default=5.4 * 60)
-    p.add_argument("--schema-budget", type=int, default=9000)
+    p.add_argument("--schema-budget", type=int, default=9000, help="ký tự lược đồ; ~5000 cho ngữ cảnh 8K token")
+    p.add_argument("--base", type=Path, default=None,
+                   help="submission.jsonl của hệ khác (v2): giữ câu nó đã trả lời, v5 chỉ làm câu nó bỏ trống")
     e = sub.add_parser("eval")
     e.add_argument("--pred", type=Path, required=True)
     e.add_argument("--ref", type=Path, required=True)
@@ -71,7 +74,9 @@ def main(argv: list[str] | None = None) -> None:
 
         cfg = Config(n_samples=a.samples, thinking=a.thinking, shops=a.shops.split(",") if a.shops else None,
                      limit=a.limit, bank_exclude_own=a.bank_exclude_own, time_budget_s=a.budget_min * 60,
-                     schema_budget=a.schema_budget)
+                     schema_budget=a.schema_budget,
+                     base={r["id"]: r for r in map(json.loads, a.base.read_text(encoding="utf-8").splitlines()) if r}
+                     if a.base and a.base.exists() else None)
         st = run(a.data, a.out, _llms(a.llm, a.model), cfg, a.cache, a.policy, a.bank, time.time())
         print(json.dumps(st, ensure_ascii=False))
     elif a.cmd == "eval":

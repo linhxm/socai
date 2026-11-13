@@ -10,48 +10,41 @@ mkdir -p /result/logs "$SOCAI_CACHE"
 
 NGPU=$(python3 -c "import torch;print(torch.cuda.device_count())" 2>/dev/null || echo 0)
 LLM_FLAG=""
-PIPE=${SOCAI_PIPELINE:-v2}   # v2 (mặc định) hoặc v5
-vllm() {  # $1 = cổng, phần còn lại = tham số thêm. Seed cố định; max-num-seqs=1 vì batching GPU có thể làm lệch đầu ra (Rule 8: |ΔPA| ≤ 0.03).
-  local port=$1; shift
-  python3 -m vllm.entrypoints.openai.api_server --model "$MODEL_DIR" --served-model-name local \
-    --host 127.0.0.1 --port "$port" --seed 0 --max-num-seqs 1 \
-    --enable-prefix-caching --max-model-len 32768 --gpu-memory-utilization 0.85 "$@" \
-    > "/result/logs/vllm_$port.log" 2>&1 &
-  PIDS="$PIDS $!"
-}
-PIDS=""; URLS=""
+PIPE=${SOCAI_PIPELINE:-v2}   # v2 | v5 | v2+v5 (v2 trả lời trước, v5 chỉ làm câu v2 bỏ trống). Đặt cố định bằng ENV trong Dockerfile.
+PIDS=""; URL=""
 if [ "$NGPU" -ge 1 ] && [ -d "$MODEL_DIR" ]; then
-  if [ "$PIPE" = v5 ]; then
-    # v5: mỗi GPU một server, pipeline chia câu hỏi cho từng server
-    for g in $(seq 0 $((NGPU - 1))); do
-      CUDA_VISIBLE_DEVICES=$g vllm $((8000 + g))
-      URLS="${URLS:+$URLS,}http://127.0.0.1:$((8000 + g))/v1"
-    done
-  else
-    vllm 8000 --tensor-parallel-size "$NGPU"
-    URLS="http://127.0.0.1:8000/v1"
-  fi
+  # Một server chia mô hình lên mọi GPU (14B bf16 ~28 GB không vừa một GPU 32 GB với 0.85 bộ nhớ).
+  # Seed cố định; max-num-seqs=1 vì batching GPU có thể làm lệch đầu ra (Rule 8: |ΔPA| ≤ 0.03).
+  python3 -m vllm.entrypoints.openai.api_server --model "$MODEL_DIR" --served-model-name local \
+    --host 127.0.0.1 --port 8000 --tensor-parallel-size "$NGPU" --seed 0 --max-num-seqs 1 \
+    --enable-prefix-caching --max-model-len 32768 --gpu-memory-utilization 0.85 \
+    > /result/logs/vllm.log 2>&1 &
+  PIDS=$!
   for _ in $(seq 1 600); do  # chờ tối đa 10 phút
-    UP=1
-    for u in ${URLS//,/ }; do curl -sf "$u/models" >/dev/null 2>&1 || UP=0; done
-    [ "$UP" = 1 ] && break
-    for pid in $PIDS; do kill -0 "$pid" 2>/dev/null || break 2; done
+    curl -sf http://127.0.0.1:8000/v1/models >/dev/null 2>&1 && break
+    kill -0 "$PIDS" 2>/dev/null || break
     sleep 1
   done
-  [ "${UP:-0}" = 1 ] || { echo "[predict] vLLM không lên → không dùng LLM"; LLM_FLAG="--no-llm"; URLS=""; }
+  if curl -sf http://127.0.0.1:8000/v1/models >/dev/null 2>&1; then URL=http://127.0.0.1:8000/v1
+  else echo "[predict] vLLM không lên → không dùng LLM"; LLM_FLAG="--no-llm"; fi
 else
   echo "[predict] không có GPU/mô hình → không dùng LLM"
   LLM_FLAG="--no-llm"
 fi
 echo "[predict] load_model_s=$(( $(date +%s) - T0 ))"
 
-if [ "$PIPE" = v5 ]; then
-  # Không có LLM thì v5 bỏ trống mọi câu (vẫn ghi đủ submission.jsonl). --budget-min tính cả thời gian nạp mô hình.
-  python3 -m socai.v5 predict --data /data --out /result --cache "$SOCAI_CACHE" ${URLS:+--llm "$URLS"} \
-    --samples "${SOCAI_SAMPLES:-4}" --budget-min $(( 324 - ($(date +%s) - T0) / 60 ))
-else
-  python3 -m socai predict --data /data --out /result $LLM_FLAG
-fi
+v5() {  # "$@" = tham số thêm. Không có LLM thì v5 bỏ trống mọi câu nhưng vẫn ghi đủ submission.jsonl.
+  python3 -m socai.v5 predict --data /data --out /result --cache "$SOCAI_CACHE" ${URL:+--llm "$URL"} \
+    --samples "${SOCAI_SAMPLES:-4}" --budget-min $(( 324 - ($(date +%s) - T0) / 60 )) "$@"
+}
+case "$PIPE" in
+  v5) v5 ;;
+  v2+v5)
+    python3 -m socai predict --data /data --out /result/v2 $LLM_FLAG
+    echo "[predict] v2 xong sau $(( $(date +%s) - T0 ))s"
+    if [ -s /result/v2/submission.jsonl ]; then v5 --base /result/v2/submission.jsonl; else v5; fi ;;
+  *) python3 -m socai predict --data /data --out /result $LLM_FLAG ;;
+esac
 STATUS=$?
 for pid in $PIDS; do kill "$pid" 2>/dev/null; done
 echo "[predict] total_s=$(( $(date +%s) - T0 )) status=$STATUS"

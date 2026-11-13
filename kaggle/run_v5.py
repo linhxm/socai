@@ -70,7 +70,8 @@ def main() -> None:
     v5 = [sys.executable, "-m", "socai.v5"]
     cmd = [*v5, "predict", "--data", str(data), "--out", str(out), "--cache", str(W / "cache"),
            "--llm", ",".join(f"http://127.0.0.1:{p}/v1" for p in PORTS), "--shops", ",".join(shops),
-           "--bank-exclude-own", *os.environ.get("V5_ARGS", "").split()]
+           "--bank-exclude-own", "--budget-min", "660", "--schema-budget", "5000",  # Kaggle: phiên 12 giờ, ngữ cảnh 8K
+           *os.environ.get("V5_ARGS", "").split()]
     limit = os.environ.get("V5_LIMIT", "20")
     if limit != "0":
         cmd += ["--limit", limit]

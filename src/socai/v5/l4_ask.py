@@ -42,7 +42,7 @@ Quy tắc viết SQL:
 1. Chỉ dùng bảng và cột có trong LƯỢC ĐỒ, đúng tên SQL (chữ thường, không dấu). Không bịa cột.
 2. Kỳ thời gian đã được giải sẵn trong phần KỲ: dùng đúng các ngày đó (BETWEEN DATE '…' AND DATE '…'), không tự tính lại.
 3. Áp dụng các LUẬT được cung cấp (đơn nào được tính, cách tính doanh thu, xếp hạng, làm tròn…). Luật là của bộ dữ liệu này; nếu luật khác thói quen thông thường thì theo luật.
-4. Lọc theo tên: dùng đúng giá trị trong mục THỰC THỂ hoặc trong danh sách giá trị của cột. Một thứ có thể được ghi nhiều cách (hoa thường, dấu, khoảng trắng): so bằng hàm khoa(cột) = 'khoá bỏ dấu' như gợi ý trong THỰC THỂ.
+4. Lọc theo tên: dùng đúng giá trị trong mục THỰC THỂ hoặc trong danh sách giá trị của cột. Một thứ có thể được ghi nhiều cách (hoa thường, dấu, khoảng trắng): so bằng hàm khoa(cột) = 'khoá bỏ dấu' như gợi ý trong THỰC THỂ. Khi nhóm theo khoa(cột), hiển thị tên bằng mode(cột) (tên gốc có dấu), không trả về khoá bỏ dấu.
 5. Kết quả phải khớp loai: number/percent/string/date/boolean → đúng 1 dòng 1 cột; list → 1 cột, đã ORDER BY đúng thứ tự câu hỏi cần và LIMIT đúng số phần tử; table → cột đầu là tên, các cột sau theo thứ tự câu hỏi.
 6. Không làm tròn trong SQL (code sẽ làm tròn). Phép chia: dùng phép chia thực và NULLIF để tránh chia cho 0.
 7. Khi xếp hạng mà bằng nhau, thêm tiêu chí phụ ổn định theo luật (nếu luật không nói thì theo mã/tên tăng dần).
@@ -151,6 +151,11 @@ def render_time(spec: TimeSpec, shop: Shop) -> str:
 def analyse(question: str, today: date, shop: Shop, rules: Rules, cal: LunarCalendar | None,
             bank: Bank | None, exclude_biz: str | None = None, k_rules: int = 12, k_examples: int = 4) -> Ask:
     spec = resolve(question, today, cal)
+    # timeexpr đọc mọi số 4 chữ số đứng riêng là năm ("mã 1203", "2000 nghìn") → bỏ kỳ quá xa hôm nay
+    lo, hi = today.replace(year=today.year - 10), today.replace(year=today.year + 1)
+    spec.periods = [p for p in spec.periods if lo <= p.start <= hi]
+    if spec.compare_to and not lo <= spec.compare_to.start <= hi:
+        spec.compare_to = None
     ents = link_entities(question, shop)
     query = question + " " + " ".join(e["cot"].replace("_", " ") for e in ents)
     cards = rules.search(query, shop.industry, k_rules)
@@ -166,6 +171,8 @@ def build_prompt(ask: Ask, shop: Shop, schema_budget: int = 9000) -> list[dict]:
         parts.append("SHOP: " + (shop.intro[:400] or "") + (f" (ngành theo luật: {shop.industry})" if shop.industry else ""))
     if shop.conventions:
         parts.append("QUY ƯỚC GHI SỔ CỦA SHOP (README):\n" + "\n".join(shop.conventions)[:1500])
+    if shop.extra:
+        parts.append("QUY ĐỔI ĐƠN VỊ VÀ GHI CHÚ CỘT (README):\n" + shop.extra[:1200])
     if ask.entities:
         parts.append("THỰC THỂ (cụm trong câu khớp với giá trị thật trong dữ liệu):\n" + "\n".join(
             f"- \"{e['cum']}\" → {e['bang']}.{e['cot']}: " + ", ".join(f"'{v}'" for v in e["gia_tri"]) +

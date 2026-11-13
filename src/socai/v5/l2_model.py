@@ -57,6 +57,8 @@ class Shop:
     date_range: tuple[str, str] | None = None
     industry: str | None = None
     index: dict[str, list[tuple[str, str, str]]] = field(default_factory=dict)  # khoá bỏ dấu → [(bảng, cột, giá trị)]
+    date_span: tuple[str, str] | None = None  # hợp mọi cột ngày: chỉ chặn câu hỏi có kỳ nằm ngoài toàn bộ
+    extra: str = ""  # quy đổi đơn vị + ghi chú cột trong README
 
 
 def slug(name: str, used: set[str], prefix: str = "c") -> str:
@@ -135,6 +137,16 @@ def _date_range(con, tables: dict[str, TableInfo], readme: Readme) -> tuple[str,
     return best[1], readme.data_end.isoformat() if readme.data_end else best[2]
 
 
+def _date_span(tables: dict[str, TableInfo], readme: Readme) -> tuple[str, str] | None:
+    los = [c.lo[:10] for t in tables.values() for c in t.cols if c.type in ("DATE", "TIMESTAMP") and c.lo]
+    his = [c.hi[:10] for t in tables.values() for c in t.cols if c.type in ("DATE", "TIMESTAMP") and c.hi]
+    if not los:
+        return None
+    if readme.data_end:
+        his.append(readme.data_end.isoformat())
+    return min(los), max(his)
+
+
 def _industry(intro: str, industries: list[str]) -> str | None:
     """Ngành của shop: tên ngành trong rulebook có cụm đặc trưng xuất hiện trong phần giới thiệu của README."""
     generic = {"cua", "hang", "tiem", "quan", "shop", "nha", "va", "ban", "dai", "ly"}
@@ -145,8 +157,9 @@ def _industry(intro: str, industries: list[str]) -> str | None:
         words = [w for w in f.split() if w not in generic]
         if f" {f} " in text:
             s = 10 + len(words)
-        else:
-            s = sum(1 for w in words if f" {w} " in text) if words and all(f" {w} " in text for w in words) else 0
+        else:  # tên ngành trong rulebook và README hiếm khi trùng hẳn: cần ≥ một nửa số từ đặc trưng
+            hit = sum(1 for w in words if f" {w} " in text)
+            s = hit if words and hit * 2 >= len(words) else 0
         if s > score:
             best, score = ind, s
     return best
@@ -155,6 +168,7 @@ def _industry(intro: str, industries: list[str]) -> str | None:
 def build_shop(biz: str, readme: Readme, tables: list[Table], industries: list[str] | None = None) -> Shop:
     con = duckdb.connect(":memory:")
     con.execute("SET threads TO 4")
+    con.execute("SET memory_limit = '8GB'")  # hai shop chạy cùng lúc; join lỗi không được ăn hết RAM
     # khoa(x) = socai.io.cells.fold: chữ thường, bỏ dấu, ký tự không phải chữ/số thành một khoảng trắng.
     # Dùng để so tên không phân biệt cách viết (luật: cùng một thứ có thể ghi nhiều cách).
     con.execute("CREATE MACRO khoa(x) AS trim(regexp_replace(replace(lower(strip_accents(CAST(x AS VARCHAR))), "
@@ -169,12 +183,14 @@ def build_shop(biz: str, readme: Readme, tables: list[Table], industries: list[s
             _profile(con, tname, c, info.rows)
         infos[tname] = info
     shop = Shop(biz, con, infos, readme.intro, readme.conventions, _date_range(con, infos, readme),
-                _industry(readme.intro, industries or []))
+                _industry(readme.intro, industries or []), date_span=_date_span(infos, readme),
+                extra="\n".join([f"- 1 {u.big_unit} {u.product} = {u.factor:g} {u.base_unit}" for u in readme.units] +
+                                [f"- {k}: {v}" for k, v in readme.notes.items()]))
     for t in infos.values():
         for c in t.cols:
             if c.type != "VARCHAR" or not 0 < c.distinct <= MAX_INDEX or c.sql == "sheet_goc":
                 continue
-            for (v,) in con.execute(f'SELECT DISTINCT "{c.sql}" FROM "{t.sql}" WHERE "{c.sql}" IS NOT NULL').fetchall():
+            for (v,) in con.execute(f'SELECT DISTINCT "{c.sql}" FROM "{t.sql}" WHERE "{c.sql}" IS NOT NULL ORDER BY 1').fetchall():
                 k = fold(v)
                 if len(k) >= 2:
                     shop.index.setdefault(k, []).append((t.sql, c.sql, v))

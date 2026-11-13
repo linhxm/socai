@@ -16,4 +16,8 @@ COPY training_code/ /code/training_code/
 COPY predict.sh README.md /code/
 COPY src/ /code/src/
 RUN chmod +x /code/predict.sh
+# Chọn đường chạy (BTC chạy predict.sh không truyền biến môi trường): v2 | v5 | v2+v5. Chỉ đổi sau khi đo trên Kaggle.
+ENV SOCAI_PIPELINE=v2 SOCAI_SAMPLES=4
+# v5 cần ngân hàng ví dụ (bị gitignore): thiếu thì dừng build thay vì nộp bản mất ~0,15 PA
+RUN case "$SOCAI_PIPELINE" in *v5*) test -s /code/src/socai/v5/bank.json || { echo "thiếu src/socai/v5/bank.json"; exit 1; } ;; esac
 CMD ["bash", "/code/predict.sh"]

@@ -188,7 +188,9 @@ def _fill_groups(df: pd.DataFrame, cols: list[Col]) -> list[str]:
     for c in rest:
         masks.setdefault(tuple(df[c.name].isna().tolist()), []).append(c)
     for _mask, group in masks.items():
-        if len(group) >= 2:
+        # cột tuỳ chọn trống cùng nhau (ngày trả + lý do trả) thường trống > 80%; dòng tiếp nối thì không
+        # shortcut: đơn trung bình > 5 dòng hàng sẽ không được điền; đổi sang dấu hiệu khác nếu gặp ở train
+        if len(group) >= 2 and df[group[0].name].isna().mean() <= 0.8:
             for c in group:
                 df[c.name] = df[c.name].ffill()
                 c.filled = True

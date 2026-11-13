@@ -104,7 +104,7 @@ def test_l3_cards_and_industry_filter():
     got = rules.search("doanh thu tháng này", "Nhà thuốc")
     assert any("không huỷ" in c.text for c in got)
     assert all(c.industry in (None, "Nhà thuốc") for c in got)
-    assert not any(c.industry for c in rules.search("doanh thu tháng này", None))
+    assert any(c.industry for c in rules.search("doanh thu tháng này", None))  # không rõ ngành: giữ thẻ ngành
 
 
 def test_l4_hint_and_prompt(shops):
@@ -155,6 +155,44 @@ def test_l6_vote_threshold_and_time_gate():
     assert gate_time(spec, ("2025-01-01", "2025-03-31"))
     assert gate_time(TimeSpec([Period(date(2025, 3, 20), date(2025, 4, 10), "range")]), ("2025-01-01", "2025-03-31")) is None
     assert gate_time(TimeSpec(), ("2025-01-01", "2025-03-31")) is None
+    # kỳ sau hôm nay không bị chặn (thường là lỗi đọc ngày; để LLM quyết)
+    assert gate_time(TimeSpec([Period(date(2026, 12, 1), date(2026, 12, 31), "month")]), ("2025-01-01", "2025-03-31"),
+                     date(2026, 1, 15)) is None
+
+
+def test_review_fixes(shops):
+    import time
+
+    import pandas as pd
+
+    from socai.v5.l1_read import Col, _fill_groups
+    from socai.v5.pipeline import _Budget
+
+    shop = next(iter(shops.values()))[1]
+    # số 4 chữ số không phải năm ("mã sp 1203", "2000 nghìn") không tạo kỳ giả
+    for q in ("đơn có mã sp 1203 bán bao nhiêu", "bao nhiêu đơn trên 2000 nghìn"):
+        assert L4.analyse(q, date(2025, 3, 31), shop, parse_rules(""), None, None).time.periods == []
+    # cột tuỳ chọn trống cùng nhau (ngày trả + lý do trả) không bị điền xuôi
+    df = pd.DataFrame({"ma": [f"A{i}" for i in range(10)], "ngay_tra": ["2025-01-01"] + [None] * 9,
+                       "ly_do": ["sai size"] + [None] * 9})
+    cols = [Col("ma", "text"), Col("ngay_tra", "text"), Col("ly_do", "text")]
+    assert _fill_groups(df, cols) == [] and df["ly_do"].isna().sum() == 9
+    # percent dạng 0..1 bị trả lại cho LLM sửa; cột tháng trả 'YYYY-MM'
+    with pytest.raises(SQLError):
+        format_answer("percent", "phan_tram", ["ti_le"], [(0.125,)], percent_scaled=False)
+    assert format_answer("date", "so", ["thang"], [(date(2025, 3, 1),)])["answer"] == "2025-03"
+    # ngân sách tính cả số luồng song song: 2 luồng, đủ giờ cho 4 mẫu/câu
+    b = _Budget(100, time.time() + 100 * 8 * 4 / 2 + 60, 4, n_workers=2)
+    assert b.take() == 4
+
+
+def test_base_floor_keeps_v2_answers(split, tmp_path):
+    qs = [json.loads(x) for x in (split / "split" / "questions.jsonl").read_text(encoding="utf-8").splitlines()]
+    base = {qs[0]["id"]: {"id": qs[0]["id"], "type": "number", "answer": 123456789}}
+    run(split / "split", tmp_path, [FakeLLM(fake_sql)], Config(n_samples=1, base=base), split / "cache")
+    sub = load_jsonl(tmp_path / "submission.jsonl")
+    assert sub[qs[0]["id"]]["answer"] == 123456789 and len(sub) == len(qs)
+    assert json.loads((tmp_path / "logs" / "run_summary.json").read_text())["kept_from_base"] == 1
 
 
 @pytest.fixture(scope="module")

@@ -52,13 +52,16 @@ class Decision:
     p: float
 
 
-def gate_time(spec: TimeSpec, date_range: tuple[str, str] | None) -> str | None:
-    """Kỳ hỏi (hoặc kỳ so sánh) nằm hoàn toàn ngoài khoảng dữ liệu → không trả lời được."""
+def gate_time(spec: TimeSpec, date_range: tuple[str, str] | None, as_of=None) -> str | None:
+    """Kỳ hỏi (hoặc kỳ so sánh) nằm hoàn toàn ngoài khoảng dữ liệu → không trả lời được.
+
+    date_range = hợp mọi cột ngày của shop. Kỳ sau hôm nay (as_of) không bị chặn: thường là lỗi đọc ngày,
+    để LLM quyết (sai ở đây mất 1 điểm, bỏ trống thì không)."""
     if not date_range:
         return None
     lo, hi = date_range
     for p in spec.periods + ([spec.compare_to] if spec.compare_to else []):
-        if p.kind == "until":
+        if p.kind == "until" or (as_of and p.start > as_of):
             continue
         if p.end.isoformat() < lo or p.start.isoformat() > hi:
             return f"kỳ {p.start} → {p.end} nằm ngoài dữ liệu của shop ({lo} → {hi})"

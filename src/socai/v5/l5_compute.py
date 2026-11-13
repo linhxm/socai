@@ -92,7 +92,7 @@ def _date(x: object) -> str:
     raise SQLError(f"kết quả '{s[:30]}' không phải ngày dạng YYYY-MM-DD hoặc YYYY-MM")
 
 
-def format_answer(kind: str, unit: str, cols: list[str], rows: list[tuple]) -> dict:
+def format_answer(kind: str, unit: str, cols: list[str], rows: list[tuple], percent_scaled: bool = True) -> dict:
     """Dựng đáp án đúng format từ kết quả SQL. Sai dạng (nhiều dòng cho câu một số…) → SQLError để LLM sửa."""
     if kind not in TYPES:
         raise SQLError(f"loai phải là một trong {TYPES} hoặc unanswerable")
@@ -105,11 +105,17 @@ def format_answer(kind: str, unit: str, cols: list[str], rows: list[tuple]) -> d
         if kind == "number":
             return {"type": kind, "answer": _number(x, unit)}
         if kind == "percent":
-            return {"type": kind, "answer": float(_number(x, "phan_tram"))}
+            v = float(_number(x, "phan_tram"))
+            if 0 < abs(v) <= 1 and not percent_scaled:
+                raise SQLError(f"percent = {v}: có vẻ là tỉ số 0..1, cần nhân 100 (12.5 cho 12,5%)")
+            return {"type": kind, "answer": v}
         if x is None:
             raise SQLError("kết quả rỗng (NULL)")
         if kind == "date":
-            return {"type": kind, "answer": _date(x)}
+            d = _date(x)
+            if isinstance(d, str) and len(d) == 10 and d.endswith("-01") and re.search(r"thang|month", cols[0], re.I):
+                d = d[:7]  # cột tháng (date_trunc) → 'YYYY-MM'
+            return {"type": kind, "answer": d}
         if kind == "boolean":
             if isinstance(x, bool):
                 return {"type": kind, "answer": x}

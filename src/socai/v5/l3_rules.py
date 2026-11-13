@@ -41,13 +41,13 @@ class Rules:
         q = Counter(tokens(query))
         scored = []
         for i, c in enumerate(self.cards):
-            if c.industry and c.industry != industry:
+            if c.industry and industry and c.industry != industry:  # không rõ ngành: giữ cả, để BM25 chọn
                 continue
             n = sum(c.toks.values()) or 1
             s = sum(self.idf.get(w, 0.0) * f * 2.2 / (f + 1.2 * (0.25 + 0.75 * n / self.avg_len))
                     for w in q if (f := c.toks.get(w, 0)))
             if s > 0:
-                scored.append((s * (1.3 if c.industry else 1.0), -i, c))
+                scored.append((s * (1.3 if c.industry and industry else 1.0), -i, c))
         return [c for _, _, c in sorted(scored, key=lambda x: (-x[0], -x[1]))[:k]]
 
 

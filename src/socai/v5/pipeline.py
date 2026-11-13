@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 import time
 from dataclasses import dataclass
@@ -38,24 +39,32 @@ class Config:
     schema_budget: int = 9000  # ký tự lược đồ trong prompt (ngữ cảnh 8K token)
     time_budget_s: float = 5.4 * 3600
     bank_exclude_own: bool = False  # đo trên train: không lấy ví dụ của chính shop đang hỏi
+    base: dict[str, dict] | None = None  # đáp án của hệ khác (v2): câu nó đã trả lời thì giữ nguyên, v5 chỉ làm câu nó bỏ trống
     shops: list[str] | None = None
     limit: int | None = None  # số câu tối đa mỗi shop
 
 
-def one_sample(llm: LLM, msgs: list[dict], shop: Shop, cfg: Config, seed: int, temp: float, thinking: list) -> dict:
+def one_sample(llm: LLM, msgs: list[dict], shop: Shop, cfg: Config, seed: int, temp: float, thinking: list,
+               tokens: list | None = None) -> dict:
     """Một mẫu: LLM viết JSON → chạy SQL → định dạng. Lỗi chạy/định dạng thì trả lỗi cho LLM sửa `cfg.repairs` lần."""
     cur, err, spec = list(msgs), None, {}
+    tokens = [] if tokens is None else tokens
     for _ in range(cfg.repairs + 1):
         c = llm.chat(cur, max_tokens=cfg.max_tokens, json_schema=L4.SPEC_SCHEMA, thinking=cfg.thinking,
                      temperature=temp, seed=seed)
         thinking.append(c.reasoning or "")
-        spec = extract_json(c.content) or {}
+        tokens.append(c.prompt_tokens)
+        try:
+            spec = json.loads(c.content)
+        except ValueError:
+            spec = extract_json(c.content) or {}
+        spec = spec if isinstance(spec, dict) else {}
         kind, unit, sql = spec.get("loai"), spec.get("don_vi") or "so", (spec.get("sql") or "").strip()
         if kind == "unanswerable":
             return {"answer": {"type": "unanswerable"}, "sql": "", "don_vi": unit, "nghi": spec.get("nghi", "")}
         try:
             cols, rows = run_sql(shop.con, sql)
-            ans = format_answer(kind, unit, cols, rows)
+            ans = format_answer(kind, unit, cols, rows, percent_scaled="100" in sql)
             return {"answer": ans, "sql": sql, "don_vi": unit, "nghi": spec.get("nghi", ""),
                     "rows": [[str(v) for v in r] for r in rows[:5]]}
         except SQLError as e:
@@ -73,7 +82,7 @@ def answer_question(q: dict, shop: Shop, rules: Rules, cal: LunarCalendar | None
     log: dict = {"id": q["id"], "business_id": q["business_id"]}
     thinking: list = []
     samples: list[dict] = []
-    why = gate_time(ask.time, shop.date_range)
+    why = gate_time(ask.time, shop.date_span, ask.today)
     if why:
         final = {"type": "unanswerable"}
         p = policy.p.get("gate_time", 0.9)
@@ -86,16 +95,20 @@ def answer_question(q: dict, shop: Shop, rules: Rules, cal: LunarCalendar | None
         decision = {"bucket": "no_llm", "agree": 0.0, "n": 0, "candidate": None, "p": 0.0}
     else:
         msgs = L4.build_prompt(ask, shop, cfg.schema_budget)
+        tokens: list[int] = []
         for i in range(n_samples):
             try:  # mẫu 0 greedy; các mẫu sau có nhiệt độ với seed cố định (chạy lại ra như cũ)
                 samples.append(one_sample(llm, msgs, shop, cfg, seed=i, temp=0.0 if i == 0 else cfg.temperature,
-                                          thinking=thinking))
+                                          thinking=thinking, tokens=tokens))
             except Exception as e:  # noqa: BLE001 — một mẫu hỏng không làm hỏng cả câu
                 samples.append({"error": f"{type(e).__name__}: {e}"[:300]})
-        conf = min([shop.tables[t].confidence for t in ask.tables if t in shop.tables] or [1.0])
+        sqls = " ".join(s.get("sql") or "" for s in samples if "answer" in s)
+        used = [t for t in shop.tables if re.search(rf'\b{re.escape(t)}\b', sqls)]  # chỉ bảng SQL thực sự dùng
+        conf = min([shop.tables[t].confidence for t in used] or [1.0])
         d = decide(samples, policy, conf)
         final = d.answer
-        decision = {"bucket": d.bucket, "agree": d.agree, "n": d.n, "candidate": d.candidate, "p": d.p}
+        decision = {"bucket": d.bucket, "agree": d.agree, "n": d.n, "candidate": d.candidate, "p": d.p,
+                    "prompt_tokens": max(tokens or [0])}
         code = [s.get("sql") for s in samples]
         output = [s.get("answer") or s.get("error") for s in samples]
     log.update({
@@ -116,8 +129,8 @@ def answer_question(q: dict, shop: Shop, rules: Rules, cal: LunarCalendar | None
 class _Budget:
     """Chia thời gian còn lại cho số câu còn lại; số mẫu mỗi câu giảm dần khi không đủ giờ."""
 
-    def __init__(self, total_q: int, deadline: float, n_samples: int):
-        self.left, self.deadline, self.n = total_q, deadline, n_samples
+    def __init__(self, total_q: int, deadline: float, n_samples: int, n_workers: int = 1):
+        self.left, self.deadline, self.n, self.workers = total_q, deadline, n_samples, n_workers
         self.per_sample = 8.0  # giây mỗi mẫu, cập nhật theo số đo thật
         self.lock = threading.Lock()
 
@@ -126,7 +139,7 @@ class _Budget:
             remain = self.deadline - time.time()
             if remain <= 5:
                 return 0
-            per_q = remain / max(self.left, 1)
+            per_q = remain * self.workers / max(self.left, 1)  # các luồng chạy song song
             self.left -= 1
             return max(1, min(self.n, int(per_q / self.per_sample)))
 
@@ -158,7 +171,12 @@ def run(data: Path, out: Path, llms: list[LLM], cfg: Config, cache: Path | None 
     rules = load_rules(data / "rulebook.md")
     policy = Policy.load(policy_path)
     bank = Bank.load(bank_path)
-    budget = _Budget(len(qs), t_start + cfg.time_budget_s, cfg.n_samples)
+    base = cfg.base or {}
+    kept = {q["id"] for q in qs if base.get(q["id"], {}).get("type", "abstain") != "abstain"}
+    n_workers = max(1, len(llms))
+    budget = _Budget(len(qs) - len(kept), t_start + cfg.time_budget_s, cfg.n_samples, n_workers)
+    print(f"[v5] {len(qs)} câu · giữ {len(kept)} đáp án của hệ nền · ngân hàng {len(bank.items) if bank else 0} ví dụ · "
+          f"hiệu chỉnh: {policy_path if policy_path and policy_path.exists() else 'mặc định (chưa đo)'}", flush=True)
     subs: dict[str, dict] = {}
     wlock = threading.Lock()
     f_sub = (out / "submission.jsonl").open("w", encoding="utf-8")
@@ -179,7 +197,13 @@ def run(data: Path, out: Path, llms: list[LLM], cfg: Config, cache: Path | None 
 
     def work(shops: list[str], llm: LLM | None) -> None:
         for biz in shops:
-            items = groups[biz]
+            for q in groups[biz]:
+                if q["id"] in kept:
+                    emit(base[q["id"]], {"id": q["id"], "answer": base[q["id"]], "elapsed_ms": 0, "thinking": None,
+                                         "code": "hệ nền v2: xem /result/v2/logs", "output": None, "decision": {"bucket": "base"}})
+            items = [q for q in groups[biz] if q["id"] not in kept]
+            if not items:
+                continue
             t0 = time.time()
             try:
                 readme, tables = read_shop(data / "data" / biz, cache)
@@ -219,7 +243,6 @@ def run(data: Path, out: Path, llms: list[LLM], cfg: Config, cache: Path | None 
             shop.con.close()
 
     order = list(groups)
-    n_workers = max(1, len(llms))
     threads = [threading.Thread(target=work, args=(order[i::n_workers], llms[i] if llms else None))
                for i in range(n_workers)]
     for t in threads:
@@ -236,5 +259,8 @@ def run(data: Path, out: Path, llms: list[LLM], cfg: Config, cache: Path | None 
         t = subs.get(q["id"], {"type": "abstain"})["type"]
         stats[t if t in ("abstain", "unanswerable") else "answered"] += 1
     stats["seconds"] = round(time.time() - t_start, 1)
+    stats["kept_from_base"] = len(kept)
+    stats["bank_examples"] = len(bank.items) if bank else 0
+    stats["calibrated"] = bool(policy_path and policy_path.exists())
     (out / "logs" / "run_summary.json").write_text(json.dumps(stats, ensure_ascii=False, indent=1), encoding="utf-8")
     return stats

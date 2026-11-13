@@ -35,4 +35,5 @@ submission.jsonl
 
 # Ngân hàng ví dụ và dữ liệu fine-tune: chứa câu hỏi và tên trong dữ liệu train của cuộc thi (KHÔNG đưa lên repo)
 src/socai/v2/bank.json*
+src/socai/v5/bank.json*
 training_code/data/finetune/

@@ -3,7 +3,7 @@ name = "socai"
 version = "0.1.0"
 description = "SOCAI: agent hỏi đáp sổ sách tiếng Việt trên dữ liệu bảng bẩn"
 requires-python = ">=3.10"
-dependencies = ["pandas>=2.1", "openpyxl>=3.1", "python-calamine>=0.2"]
+dependencies = ["pandas>=2.1", "openpyxl>=3.1", "python-calamine>=0.2", "duckdb>=1.1"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]

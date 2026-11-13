@@ -15,6 +15,8 @@ Agent trả lời câu hỏi tiếng Việt đời thường (có cả không d�
 
 Phần dùng chung cho cả hai phiên bản nằm ở [docs/chung.md](docs/chung.md): đọc file bẩn, thời gian, bảng chuẩn, chính sách trả lời, hạ tầng, nộp bài. Ở cả hai phiên bản, LLM **không tự tính toán**.
 
+**v5 (13/11, thử nghiệm, chưa đo trên dữ liệu thật):** LLM viết SQL chạy trên DuckDB, nhiều mẫu bỏ phiếu, không có logic riêng cho shop hay ngành. Xem [docs/v5.md](docs/v5.md). Mặc định vẫn là v2.
+
 ## Kết quả đo được
 Đo trên **hold-out 6 shop train** (631 câu), là các shop không dùng để phát triển phần mới ([configs/holdout.json](configs/holdout.json)):
 

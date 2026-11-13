@@ -120,7 +120,7 @@ HEADER_RULES: dict[str, str] = {
     "chi tiet hang": "product_name", "don vi": "unit", "gia niem yet": "unit_price", "khuyen mai": "discount",
     "thu tu dong": "line_no", "so luong co ban": "qty_base", "gio tao don": "order_time", "gio ban": "order_time",
     "gio": "order_time", "nguon don": "channel", "nguoi ban": "staff_id", "loai khach hang": "customer_group",
-    "loai khach": "customer_group", "ma hang hoa": "product_code",
+    "loai khach": "customer_group", "ma hang hoa": "product_code", "ngay lap": "order_date", "thoi gian lap": "order_datetime",
 }
 
 # Chữ viết tắt trong tên cột → dạng đầy đủ (tra lại từ điển sau khi bung)

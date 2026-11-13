@@ -1,14 +1,14 @@
-# Theo "Docker Submission Guide — Zalo AI Challenge 2026 · DataMate" (Dockerfile tham chiếu, mục 9).
-# Build: docker build --platform linux/amd64 -f docker/Dockerfile -t zaic2026_datamate_<team>:final .
-# Thử như BTC: docker run --rm --gpus '"device=0,1"' --network none --shm-size=16g --entrypoint bash \
-#   -v /path/public_test:/data:ro -v /path/out:/result zaic2026_datamate_<team>:final /code/predict.sh
+# Image chạy offline cho SOCAI.
+# Build: docker build --platform linux/amd64 -f docker/Dockerfile -t socai:final .
+# Thử offline: docker run --rm --gpus '"device=0,1"' --network none --shm-size=16g --entrypoint bash \
+#   -v /path/public_test:/data:ro -v /path/out:/result socai:final /code/predict.sh
 FROM vllm/vllm-openai:v0.10.1.1
 ENTRYPOINT []
 ENV HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 PIP_NO_CACHE_DIR=1 NCCL_P2P_DISABLE=1 PYTHONHASHSEED=0
 WORKDIR /code
 COPY requirements.txt /code/requirements.txt
 RUN pip install --no-cache-dir -r /code/requirements.txt
-# Mẫu của BTC sửa treo khởi tạo 2 GPU bằng NCCL 2.27.7 — cần tự kiểm lại với stack của mình
+# Mẫu tham chiếu sửa treo khởi tạo 2 GPU bằng NCCL 2.27.7 — cần tự kiểm lại với stack của mình
 RUN pip install --no-cache-dir --no-deps nvidia-nccl-cu12==2.27.7
 # Tách COPY để giữ cache layer trọng số khi chỉ sửa code
 COPY models/ /code/models/

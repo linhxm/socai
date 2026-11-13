@@ -154,6 +154,9 @@ _MANY = __import__("re").compile(r"\b(top|liet ke|nhung|cac|(?<![\d/])\d{1,2} (m
 def lint(expr: object, question: str, notes: list[str]) -> object:
     f = " ".join(untelex(w) for w in fold(question).split())
     ge, gt = bool(_GE.search(f)), bool(_GT.search(f))
+    # nhiều ngưỡng số (khoảng "8–15", chia nhóm) thì "trên"/"hơn" chỉ nói về một ngưỡng: không soát
+    if len(re.findall(r'(?<!"gio", )"(>=|>|<=|<)", -?\d', json.dumps(expr))) > 1:
+        ge = gt = False
 
     def fix(d: dict) -> dict:
         d = dict(d)
@@ -201,6 +204,11 @@ def lint(expr: object, question: str, notes: list[str]) -> object:
             if len(e) in (2, 3) and e and isinstance(e[0] if len(e) == 2 else e[1], str):
                 op_i = 0 if len(e) == 2 else 1
                 op = e[op_i]
+                val = e[-1]
+                col = e[0] if len(e) == 3 and isinstance(e[0], str) else ""
+                if not isinstance(val, (int, float)) or isinstance(val, bool) \
+                        or col == "gio" or col.startswith("ngay"):  # mốc ngày, giờ, chuỗi: không soát
+                    return [walk(x) for x in e]
                 new = ">=" if (op == ">" and ge and not gt) else (">" if op == ">=" and gt and not ge else op)
                 if new != op:
                     notes.append(f"soát dấu theo câu hỏi: {op} → {new}")

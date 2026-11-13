@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Entry point theo hướng dẫn Docker DataMate: bash /code/predict.sh (không tham số).
+# Entry point: bash /code/predict.sh (không tham số).
 # /data (chỉ đọc) → /result/submission.jsonl + /result/logs/. Mọi tham số cố định ở đây (Rule 5.3).
 set -uo pipefail
 T0=$(date +%s)

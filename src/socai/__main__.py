@@ -1,4 +1,4 @@
-"""CLI SổCái.
+"""CLI SOCAI.
 
   python -m socai predict  --data /data --out /result [--no-llm] [--limit N]
   python -m socai eval     --split train --out runs/train [--no-llm] [--calibrate configs/calibration.json]
@@ -64,7 +64,8 @@ def main(argv: list[str] | None = None) -> None:
     if args.cmd in ("predict", "eval"):
         t0 = time.time()
         data = args.data or args.split
-        cfg = AgentConfig(use_llm=not args.no_llm, use_v2=True, verify_fastpath=args.verify_fastpath, thinking=args.thinking)
+        cfg = AgentConfig(use_llm=not args.no_llm, use_v2=True, second_opinion=True,  # cấu hình hold-out 0,715
+                          verify_fastpath=args.verify_fastpath, thinking=args.thinking)
         stats = run(data, args.out, _llm(args), cfg, RunConfig(limit=args.limit), args.cache,
                     args.policy if args.policy.exists() else None, t0)
         print(json.dumps(stats, ensure_ascii=False))

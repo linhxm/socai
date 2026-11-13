@@ -1,6 +1,6 @@
-# training_code — SổCái
+# training_code — SOCAI
 
-Theo mục 8 "README and training code" của hướng dẫn Docker DataMate.
+Theo mục "README and training code" của hướng dẫn đóng gói.
 
 ## Trạng thái hiện tại (cập nhật trước mỗi lần nộp)
 - **Không fine-tune mô hình** trong bản hiện tại. Mô hình dùng nguyên bản công khai (xem `/code/README.md`).

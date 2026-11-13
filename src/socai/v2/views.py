@@ -368,6 +368,33 @@ def _join_parent(views: list[View]) -> None:
             _set_status_default(w)
 
 
+def _fill_names_from_code(ban: View, views: list[View]) -> None:
+    """Dòng bán chỉ ghi mã hàng, tên (và nhóm) để trống → điền theo danh mục khớp mã (≥ 60% mã). Không điền thì các
+    dòng đó rơi khỏi mọi câu theo mặt hàng / nhóm hàng."""
+    if "ma_hang" not in ban.df:
+        return
+    code = ban.df["ma_hang"].map(clean)
+    miss = ban.df["mat_hang"].map(clean).eq("") & code.ne("")
+    if not miss.any():
+        return
+    codes = set(code[miss].map(fold))
+    for w in views:
+        name = next((c for c in w.cols if w.cols[c].kind == "cat" and (c == "mat_hang" or re.match(r"^(ten|name)", c))), None)
+        if name is None:
+            continue
+        for c, vals, col in _key_cols(w, unique=True):
+            if c == name or len(vals & codes) < 0.6 * len(codes):
+                continue
+            first = w.df.assign(_k=col).drop_duplicates("_k").set_index("_k")
+            k = code[miss].map(fold)
+            ban.df.loc[miss, "mat_hang"] = k.map(first[name]).fillna("")
+            grp = next((g for g in w.cols if g == "nhom_hang" or g.startswith("nhom_hang")), None)
+            if grp and "nhom_hang" in ban.df:
+                blank = miss & ban.df["nhom_hang"].map(clean).eq("")
+                ban.df.loc[blank, "nhom_hang"] = code[blank].map(fold).map(first[grp]).fillna("")
+            return
+
+
 def _code_from_name(ban: View, views: list[View]) -> None:
     """Dòng bán chỉ ghi tên → điền ma_hang theo danh mục có cả mã và tên (tên ↔ mã một-một). Nhờ đó nối được các
     bảng chỉ ghi mã (danh mục thuốc, lô, chi tiết nhập) và xếp hoà theo mã (§9)."""
@@ -448,6 +475,7 @@ def build_views(biz: Business, can: Canonical) -> dict[str, View]:
     for dv in debt_views(biz, views.get("don")):
         views[dv.name] = dv
     if "ban" in views:
+        _fill_names_from_code(views["ban"], others)
         _code_from_name(views["ban"], others)
         _name_from_code(views["ban"], others)
         _join_attributes(views["ban"], others)

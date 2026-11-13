@@ -1,4 +1,4 @@
-"""Bộ chấm cục bộ mô phỏng luật chấm DataMate (đề bài + rulebook §9). Penalized Accuracy:
+"""Bộ chấm cục bộ mô phỏng luật chấm (đề bài + rulebook §9). Penalized Accuracy:
 đúng +1, abstain/thiếu 0, sai −1; trả lời câu unanswerable bằng giá trị là sai.
 
 Luật so khớp:

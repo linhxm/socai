@@ -1,6 +1,6 @@
-# SổCái: agent hỏi đáp sổ sách tiếng Việt
+# SOCAI: agent hỏi đáp sổ sách tiếng Việt
 
-Bài giải cho **Zalo AI Challenge 2026 · DataMate**: trả lời câu hỏi tiếng Việt đời thường (có cả không dấu, teencode, gõ Telex sót) trên dữ liệu CSV/XLSX/SQLite bẩn của cửa hàng nhỏ.
+Agent trả lời câu hỏi tiếng Việt đời thường (có cả không dấu, teencode, gõ Telex sót) trên dữ liệu CSV/XLSX/SQLite bẩn của cửa hàng nhỏ.
 
 Điểm chấm là Penalized Accuracy: đúng +1, sai −1, bỏ trống 0. Vì vậy hệ thống **chỉ trả lời khi đủ chắc**.
 
@@ -49,17 +49,17 @@ python -m socai profile --biz ../train/data/biz_101
 python -m socai rulebook-diff ../train/rulebook.md ../public_test/rulebook.md
 python -m socai synth --out /tmp/synth --n-biz 3 --render-images
 ```
-Nộp bài: Docker theo hướng dẫn của BTC, xem `docker/Dockerfile`, `predict.sh` và [docs/chung.md](docs/chung.md) §6.
+Đóng gói: Docker, xem `docker/Dockerfile`, `predict.sh` và [docs/chung.md](docs/chung.md) §6.
 
 ## Tài liệu
 - [docs/chung.md](docs/chung.md): đề bài, ràng buộc, dữ liệu, phần tất định dùng chung, mô hình và hạ tầng, nộp bài, Track B
 - [docs/v1.md](docs/v1.md): đường luật + kế hoạch 4B, số đo và giới hạn dẫn tới v2
 - [docs/v2.md](docs/v2.md): đại số truy vấn, ngân hàng ví dụ, kết quả 4B/14B, việc tiếp theo
-- [docs/v3.md](docs/v3.md): research (paper, repo đội khác), chỗ mất điểm, kiến trúc và kế hoạch v3 (mục tiêu PA public = 1)
+- [docs/v3.md](docs/v3.md): research (paper), chỗ mất điểm, kiến trúc và kế hoạch v3 (mục tiêu PA public = 1)
 - [kaggle/README.md](kaggle/README.md): chạy 14B trên Kaggle · [training_code/README.md](training_code/README.md): ngân hàng ví dụ, fine-tune
 
 ## Không có trong repo
-- Dữ liệu cuộc thi (train/public/private), vì quy định của BTC.
+- Dữ liệu (train/public/private): không công bố.
 - Trọng số mô hình: tải Qwen3-4B từ nguồn chính thức và ghi revision trong README nộp bài.
 
 ## Khai báo mô hình (điền trước khi nộp)

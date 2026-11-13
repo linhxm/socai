@@ -36,10 +36,10 @@ def norm_status(v: object) -> str:
 
 
 LINE_FIELDS = ["order_id", "line_no", "order_date", "order_datetime", "order_time", "status", "note",
-               "customer_id", "customer_name", "product_code", "product_name", "product_group", "qty",
+               "customer_id", "customer_name", "customer_group", "product_code", "product_name", "product_group", "qty",
                "unit", "qty_base", "unit_price", "line_amount", "discount", "cost_unit", "qty_returned_base",
                "payment_method", "channel", "staff_id"]
-ORDER_LEVEL = ["order_date", "order_datetime", "status", "customer_id", "customer_name", "note",
+ORDER_LEVEL = ["order_date", "order_datetime", "status", "customer_id", "customer_name", "customer_group", "note",
                "payment_method", "channel", "staff_id"]
 
 
@@ -83,7 +83,13 @@ def _drop_subtotals(df: pd.DataFrame) -> pd.DataFrame:
     for c in ("product_name", "order_id", "customer_name", "note"):
         if c in df:
             mask |= df[c].map(fold).str.startswith(_SUBTOTAL)
-    return df[~(mask & df["qty"].map(clean).eq(""))]
+    mask &= df["qty"].map(clean).eq("")
+    # chú thích cuối trang ("Ghi chú: số liệu ghi tay"): một ô chữ bắt đầu 'ghi chú:', mọi ô còn lại để trống
+    for c in ("product_name", "order_id", "customer_name", "note"):
+        if c in df:
+            f = df[c].map(fold)
+            mask |= f.str.startswith("ghi chu ") & df["qty"].map(clean).eq("") & df["line_amount"].map(clean).eq("")
+    return df[~mask]
 
 
 def _ffill_groups(df: pd.DataFrame) -> pd.DataFrame:
@@ -137,7 +143,8 @@ def build(biz: Business) -> Canonical:
                 gmap = {fold(n): clean(g) for n, g in zip(t.raw.df[ncol], t.raw.df[gcol]) if fold(n)}
                 lines["product_group"] = lines["product_group"].where(
                     lines["product_group"].map(clean).ne(""), lines["product_name"].map(lambda v: gmap.get(fold(v))))
-        lines["customer_group"] = None
+        if "customer_group" not in lines:  # nhóm khách ghi ngay trên sổ bán thì giữ
+            lines["customer_group"] = None
         for t in biz.by_role("customers"):  # nhóm khách, tên khách từ danh sách khách hàng
             cid = t.col("customer_id")
             if not cid:
@@ -268,4 +275,7 @@ def _orders_only(tabs: list[Table]) -> pd.DataFrame:
         })
         parts.append(o)
     o = pd.concat(parts, ignore_index=True)
-    return o[o["d"].notna()]
+    o = o[o["d"].notna()]
+    # §8: hai dòng của CÙNG một đơn giống nhau ở mọi ô là lỗi xuất file, tính một lần
+    has_id = o["order_id"].ne("")
+    return pd.concat([o[has_id].drop_duplicates(), o[~has_id]]).sort_index()

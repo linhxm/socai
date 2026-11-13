@@ -1,10 +1,10 @@
-# SổCái: phần chung cho mọi phiên bản
+# SOCAI: phần chung cho mọi phiên bản
 
 > Đề bài, dữ liệu, ràng buộc, hạ tầng và nộp bài. Cách giải từng phiên bản: [v1.md](v1.md), [v2.md](v2.md).
 > Cập nhật 12/11/2026. Nhãn: **[ĐCBC]** đã có bằng chứng · **[SL]** suy luận · **[CB]** chưa biết · **[CKC]** cần kiểm chứng.
 
 ## 1. Đề bài
-**Zalo AI Challenge 2026 · DataMate.** Mỗi lượt agent nhận:
+Mỗi lượt agent nhận:
 - gói dữ liệu của một shop (CSV/XLSX/SQLite bẩn) kèm README;
 - `rulebook.md` và `calendar.csv` (lịch âm) của split đang chạy;
 - một câu hỏi tiếng Việt đời thường, có thể không dấu, teencode hoặc gõ Telex sót.

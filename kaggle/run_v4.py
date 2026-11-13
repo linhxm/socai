@@ -14,10 +14,11 @@ import os
 import subprocess
 import sys
 import threading
+import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from run_14b import W, build_llama, download, find_inputs, log  # noqa: E402
+from run_14b import W, build_llama, download, log  # noqa: E402
 
 MODEL = "qwen3-14b"
 SPLIT = os.environ.get("V4_SPLIT", "train")
@@ -25,20 +26,35 @@ LIMIT = os.environ.get("V4_LIMIT", "20")
 ARGS = os.environ.get("V4_ARGS", "")
 
 
-def find_split(train: Path) -> Path:
+def find_data() -> tuple[Path, Path]:
+    """Mã = repo chứa script này (git clone vào /kaggle/working/socai). Dữ liệu theo V4_SPLIT, tìm trong mọi Input
+    (zip thì giải nén vào /kaggle/working/inputs):
+    - train: thư mục có questions.jsonl + answers.jsonl (dataset socai-data);
+    - public: thư mục có questions.jsonl + rulebook.md, không có answers.jsonl (dataset public riêng).
+    v4 không cần bank.json."""
+    code = Path(__file__).resolve().parents[1]
+    if not (code / "src" / "socai" / "v4").exists():
+        raise SystemExit(f"mã chưa có v4: {code} (git pull / clone lại)")
+    for z in glob.glob("/kaggle/input/**/*.zip", recursive=True):
+        with zipfile.ZipFile(z) as f:
+            f.extractall(W / "inputs")
+    cands = [Path(p).parent for r in ("/kaggle/input", str(W / "inputs"))
+             for p in glob.glob(f"{r}/**/questions.jsonl", recursive=True)]
     if SPLIT == "train":
-        return train
-    for p in glob.glob("/kaggle/input/**/questions.jsonl", recursive=True) + \
-            glob.glob(f"{W}/inputs/**/questions.jsonl", recursive=True):
-        d = Path(p).parent
-        if (d / "rulebook.md").exists() and not (d / "answers.jsonl").exists():
-            return d
-    raise SystemExit("không thấy public_test (questions.jsonl + rulebook.md, không có answers.jsonl) trong Input")
+        data = next((d for d in cands if (d / "answers.jsonl").exists() and (d / "data").exists()), None)
+    else:
+        data = next((d for d in cands if (d / "rulebook.md").exists() and (d / "data").exists()
+                     and not (d / "answers.jsonl").exists()), None)
+    if data is None:
+        found = [str(d) for d in cands]
+        raise SystemExit(f"không thấy dữ liệu split={SPLIT} trong Input. questions.jsonl tìm thấy ở: {found or 'không có'}"
+                         " — gắn dataset (Add Input) rồi chạy lại")
+    log(f"mã: {code} · dữ liệu ({SPLIT}): {data}")
+    return code, data
 
 
 def main() -> None:
-    code, train = find_inputs()
-    data = find_split(train)
+    code, data = find_data()
     sys.path.insert(0, str(code / "src"))
     from socai.llm.serve import profile, start, wait_ready
     prof = profile(MODEL, code / "configs" / "models.json")

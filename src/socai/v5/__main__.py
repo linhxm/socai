@@ -51,6 +51,9 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--policy", type=Path, default=HERE / "calibration.json")
     p.add_argument("--bank", type=Path, default=HERE / "bank.json")
     p.add_argument("--bank-exclude-own", action="store_true", help="đo trên train: không lấy ví dụ của chính shop")
+    p.add_argument("--verify", action="store_true",
+                   help="với --base: v5 chạy cả câu base đã trả lời, đồng thuận tuyệt đối ở đáp án khác thì bỏ trống câu đó")
+    p.add_argument("--v2-tables", action="store_true", help="viết SQL trên bảng đã làm sạch của v2 khi có")
     p.add_argument("--budget-min", type=float, default=5.4 * 60)
     p.add_argument("--schema-budget", type=int, default=9000, help="ký tự lược đồ; ~5000 cho ngữ cảnh 8K token")
     p.add_argument("--base", type=Path, default=None,
@@ -59,6 +62,7 @@ def main(argv: list[str] | None = None) -> None:
     e.add_argument("--pred", type=Path, required=True)
     e.add_argument("--ref", type=Path, required=True)
     e.add_argument("--questions", type=Path, default=None)
+    e.add_argument("--log", type=Path, default=None, help="log.jsonl của lượt --verify: đếm veto đúng/sai")
     for name in ("bank", "calibrate"):
         b = sub.add_parser(name)
         b.add_argument("--log", type=Path, required=True)
@@ -74,7 +78,7 @@ def main(argv: list[str] | None = None) -> None:
 
         cfg = Config(n_samples=a.samples, thinking=a.thinking, shops=a.shops.split(",") if a.shops else None,
                      limit=a.limit, bank_exclude_own=a.bank_exclude_own, time_budget_s=a.budget_min * 60,
-                     schema_budget=a.schema_budget,
+                     schema_budget=a.schema_budget, verify=a.verify, v2_tables=a.v2_tables,
                      base={r["id"]: r for r in map(json.loads, a.base.read_text(encoding="utf-8").splitlines()) if r}
                      if a.base and a.base.exists() else None)
         st = run(a.data, a.out, _llms(a.llm, a.model), cfg, a.cache, a.policy, a.bank, time.time())
@@ -95,6 +99,16 @@ def main(argv: list[str] | None = None) -> None:
                 n = sum(c.values())
                 print(f"{b}: đúng {c['correct']} sai {c['wrong']} trống {c['abstain']} "
                       f"PA {(c['correct'] - c['wrong']) / n:.3f}")
+        if a.log:  # veto tốt = base sai (được +1); veto xấu = base đúng (mất 1)
+            from socai.eval.scorer import judge
+
+            c: Counter = Counter()
+            for line in a.log.read_text(encoding="utf-8").splitlines():
+                d = json.loads(line).get("decision", {})
+                rid = json.loads(line)["id"]
+                if d.get("verify") and rid in refs:
+                    c[(d["verify"], judge(d["base"], refs[rid]))] += 1
+            print("kiểm chéo (quyết định, base đúng/sai):", {f"{k[0]}/{k[1]}": v for k, v in sorted(c.items())})
         bt: dict = defaultdict(Counter)
         for qid, v in r["verdicts"].items():
             bt[refs[qid]["type"]][v] += 1

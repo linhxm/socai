@@ -264,3 +264,32 @@ def read_shop(biz_dir: Path, cache: Path | None = None) -> tuple[Readme, list[Ta
             if t is not None and len(t.df):
                 tables.append(t)
     return readme, tables
+
+
+V2_KIND = {"money": "number", "num": "number", "hour": "number", "qty": "number", "date": "date"}
+
+
+def read_shop_v2(biz_dir: Path, cache: Path | None = None) -> tuple[Readme, list[Table]] | None:
+    """Bảng ĐÃ LÀM SẠCH của v2 (trạng thái chuẩn hoá, khách gộp cách viết, số lượng quy về đơn vị cơ bản) thay cho
+    bảng thô. Chỉ dùng khi v2 nhận ra sổ bán hàng (`ban`); shop/ngành v2 không hiểu → None, dùng `read_shop`."""
+    from socai.profile.business import load_business
+    from socai.semantic.canonical import build
+    from socai.v2.views import build_views
+
+    biz = load_business(biz_dir, cache)
+    views = build_views(biz, build(biz))
+    if "ban" not in views:
+        return None
+    tables = []
+    for v in views.values():
+        cols = [Col(c.name, V2_KIND.get(c.kind, "text"), c.desc) for c in v.cols.values() if c.name in v.df]
+        if not cols or v.df.empty:
+            continue
+        df = v.df[[c.name for c in cols]].reset_index(drop=True).astype(object)
+        df = df.where(df.notna() & df.ne(""), None)
+        notes = [v.desc]
+        if v.default_status and v.status_col:  # v2 tự lọc mặc định; SQL của v5 phải lọc tường minh
+            notes.append(f"đơn/dòng hợp lệ theo luật: {v.status_col} IN (" +
+                         ", ".join(f"'{x}'" for x in v.default_status) + ")")
+        tables.append(Table(v.name, "v2", df, cols, notes))
+    return biz.readme, tables

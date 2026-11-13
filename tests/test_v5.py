@@ -238,3 +238,25 @@ def test_bank_and_calibration_from_train_log(e2e, tmp_path):
 def test_time_budget_exhausted_abstains(split, tmp_path):
     stats = run(split / "split", tmp_path / "out", [FakeLLM(fake_sql)], Config(n_samples=3, time_budget_s=0.0))
     assert stats["answered"] == 0 and stats["abstain"] + stats["unanswerable"] == stats["n"]
+
+
+def test_verify_vetoes_base_answer_v5_unanimously_contradicts(split, tmp_path):
+    qs = [json.loads(x) for x in (split / "split" / "questions.jsonl").read_text(encoding="utf-8").splitlines()]
+    ref = load_jsonl(split / "split" / "answers.jsonl")
+    good, bad = qs[0]["id"], qs[1]["id"]
+    assert ref[bad]["type"] == "number"
+    base = {good: ref[good], bad: {"id": bad, "type": "number", "answer": ref[bad]["answer"] + 1}}
+    st = run(split / "split", tmp_path, [FakeLLM(fake_sql)], Config(n_samples=3, base=base, verify=True), split / "cache")
+    sub = load_jsonl(tmp_path / "submission.jsonl")
+    assert sub[good] == ref[good] and sub[bad]["type"] == "abstain" and st["base_vetoed"] == 1
+
+
+def test_v2_clean_tables_load_into_duckdb(split):
+    from socai.v5.l1_read import read_shop_v2
+
+    d = sorted((split / "split" / "data").iterdir())[0]
+    readme, tables = read_shop_v2(d)
+    shop = build_shop(d.name, readme, tables)
+    assert "ban" in shop.tables and {"ngay", "trang_thai", "thanh_tien"} <= {c.sql for c in shop.tables["ban"].cols}
+    cols, rows = run_sql(shop.con, "SELECT sum(thanh_tien) FROM ban WHERE trang_thai IN ('hoàn thành', 'đang giao')")
+    assert rows[0][0] > 0 and any("trang_thai IN" in n for n in shop.tables["ban"].notes)

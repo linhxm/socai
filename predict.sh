@@ -35,14 +35,15 @@ echo "[predict] load_model_s=$(( $(date +%s) - T0 ))"
 
 v5() {  # "$@" = tham số thêm. Không có LLM thì v5 bỏ trống mọi câu nhưng vẫn ghi đủ submission.jsonl.
   python3 -m socai.v5 predict --data /data --out /result --cache "$SOCAI_CACHE" ${URL:+--llm "$URL"} \
-    --samples "${SOCAI_SAMPLES:-4}" --budget-min $(( 324 - ($(date +%s) - T0) / 60 )) "$@"
+    --samples "${SOCAI_SAMPLES:-4}" --budget-min $(( 324 - ($(date +%s) - T0) / 60 )) ${SOCAI_V2_TABLES:+--v2-tables} "$@"
 }
 case "$PIPE" in
   v5) v5 ;;
   v2+v5)
     python3 -m socai predict --data /data --out /result/v2 $LLM_FLAG
     echo "[predict] v2 xong sau $(( $(date +%s) - T0 ))s"
-    if [ -s /result/v2/submission.jsonl ]; then v5 --base /result/v2/submission.jsonl; else v5; fi ;;
+    # SOCAI_VERIFY=1: v5 chạy cả câu v2 đã trả lời và bỏ trống câu mà cả k mẫu đồng thuận ở đáp án khác v2
+    if [ -s /result/v2/submission.jsonl ]; then v5 --base /result/v2/submission.jsonl ${SOCAI_VERIFY:+--verify}; else v5; fi ;;
   *) python3 -m socai predict --data /data --out /result $LLM_FLAG ;;
 esac
 STATUS=$?

@@ -22,11 +22,11 @@ from socai.llm.client import LLM, extract_json
 from socai.rules.calendar import LunarCalendar
 from socai.v5 import l4_ask as L4
 from socai.v5.bank import Bank
-from socai.v5.l1_read import read_shop
+from socai.v5.l1_read import read_shop, read_shop_v2
 from socai.v5.l2_model import Shop, build_shop
 from socai.v5.l3_rules import Rules, load_rules
 from socai.v5.l5_compute import SQLError, format_answer, run_sql
-from socai.v5.l6_decide import Policy, decide, gate_time
+from socai.v5.l6_decide import Policy, answer_key, decide, gate_time
 
 
 @dataclass
@@ -40,6 +40,8 @@ class Config:
     time_budget_s: float = 5.4 * 3600
     bank_exclude_own: bool = False  # đo trên train: không lấy ví dụ của chính shop đang hỏi
     base: dict[str, dict] | None = None  # đáp án của hệ khác (v2): câu nó đã trả lời thì giữ nguyên, v5 chỉ làm câu nó bỏ trống
+    verify: bool = False  # có base: v5 chạy cả câu base đã trả lời; cả k mẫu đồng thuận ở đáp án KHÁC base → bỏ trống
+    v2_tables: bool = False  # viết SQL trên bảng đã làm sạch của v2 khi v2 nhận ra sổ bán hàng; không thì bảng thô
     shops: list[str] | None = None
     limit: int | None = None  # số câu tối đa mỗi shop
 
@@ -172,7 +174,8 @@ def run(data: Path, out: Path, llms: list[LLM], cfg: Config, cache: Path | None 
     policy = Policy.load(policy_path)
     bank = Bank.load(bank_path)
     base = cfg.base or {}
-    kept = {q["id"] for q in qs if base.get(q["id"], {}).get("type", "abstain") != "abstain"}
+    answered = {q["id"] for q in qs if base.get(q["id"], {}).get("type", "abstain") != "abstain"}
+    kept = set() if cfg.verify else answered  # kept: không chạy v5
     n_workers = max(1, len(llms))
     budget = _Budget(len(qs) - len(kept), t_start + cfg.time_budget_s, cfg.n_samples, n_workers)
     print(f"[v5] {len(qs)} câu · giữ {len(kept)} đáp án của hệ nền · ngân hàng {len(bank.items) if bank else 0} ví dụ · "
@@ -206,7 +209,13 @@ def run(data: Path, out: Path, llms: list[LLM], cfg: Config, cache: Path | None 
                 continue
             t0 = time.time()
             try:
-                readme, tables = read_shop(data / "data" / biz, cache)
+                got = None
+                if cfg.v2_tables:
+                    try:
+                        got = read_shop_v2(data / "data" / biz, cache)
+                    except Exception:  # noqa: BLE001 — tầng dữ liệu v2 lỗi với shop lạ: dùng bảng thô
+                        got = None
+                readme, tables = got or read_shop(data / "data" / biz, cache)
                 shop = build_shop(biz, readme, tables, rules.industries)
             except Exception as e:  # noqa: BLE001 — shop không đọc được: bỏ trống cả shop, không dừng cả lượt
                 with wlock:
@@ -219,6 +228,7 @@ def run(data: Path, out: Path, llms: list[LLM], cfg: Config, cache: Path | None 
                 continue
             with wlock:
                 write(f_shop, {"shop": biz, "seconds": round(time.time() - t0, 1), "industry": shop.industry,
+                               "v2_tables": got is not None,
                                "date_range": shop.date_range,
                                "tables": {t.sql: {"source": t.orig, "rows": t.rows, "notes": t.notes,
                                                   "columns": {c.sql: [c.orig, c.type] for c in t.cols}}
@@ -237,6 +247,13 @@ def run(data: Path, out: Path, llms: list[LLM], cfg: Config, cache: Path | None 
                            "decision": {"bucket": "error"}}
                 if llm is not None and log.get("samples"):
                     budget.observe(time.time() - t1, len(log["samples"]))
+                if q["id"] in answered:  # kiểm chéo: giữ đáp án base trừ khi v5 đồng thuận tuyệt đối ở đáp án khác
+                    d, b = log.get("decision", {}), base[q["id"]]
+                    veto = bool(d.get("bucket") == "all" and d.get("candidate")
+                                and answer_key(d["candidate"]) != answer_key(b))
+                    d.update(base=b, verify="veto" if veto else "keep")
+                    sub = {"id": q["id"], "type": "abstain"} if veto else b
+                    log["answer"] = {k: v for k, v in sub.items() if k != "id"}
                 emit(sub, log)
                 print(f"[{time.time() - t_start:7.0f}s] {biz} {len(subs)}/{len(qs)} {sub['type']:12s} "
                       f"k={k} {log.get('decision', {}).get('bucket', ''):9s} {q['question'][:60]}", flush=True)
@@ -260,6 +277,7 @@ def run(data: Path, out: Path, llms: list[LLM], cfg: Config, cache: Path | None 
         stats[t if t in ("abstain", "unanswerable") else "answered"] += 1
     stats["seconds"] = round(time.time() - t_start, 1)
     stats["kept_from_base"] = len(kept)
+    stats["base_vetoed"] = sum(1 for i in answered if subs.get(i, {}).get("type") == "abstain")
     stats["bank_examples"] = len(bank.items) if bank else 0
     stats["calibrated"] = bool(policy_path and policy_path.exists())
     (out / "logs" / "run_summary.json").write_text(json.dumps(stats, ensure_ascii=False, indent=1), encoding="utf-8")

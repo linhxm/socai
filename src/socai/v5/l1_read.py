@@ -215,7 +215,7 @@ def _describe(readme: Readme, raw: RawTable, column: str) -> str:
     for key, cols in readme.columns.items():
         if column in cols and ({fold(key).replace(" ", ""), _stem(key), _stem(key.split("::")[-1])} & own):
             return cols[column]
-    return readme.notes.get(column) or ""
+    return ""  # câu quy ước '**Cột** là …' không nói của bảng nào: đã đưa vào prompt riêng (Shop.extra)
 
 
 def _merge_split(tables: list[Table]) -> list[Table]:

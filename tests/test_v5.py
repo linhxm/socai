@@ -282,3 +282,7 @@ def test_real_data_fixes(tmp_path):
     shop = build_shop("biz_x", readme, tables, ["Cà phê", "Nhà thuốc", "Vật liệu xây dựng"])
     assert shop.industry == "Cà phê"
     assert _industry_from_data(shop, ["Nhà thuốc"]) is None
+    # "thuộc tính" bỏ dấu là "thuoc tinh": không được nhận thành ngành Nhà thuốc
+    (d / "ThuocTinh.csv").write_text("Thuộc tính,Giá trị\nsize,M\nsize,L\n", encoding="utf-8")
+    readme, tables = read_shop(d)
+    assert _industry_from_data(build_shop("biz_x", readme, tables), ["Nhà thuốc"]) is None

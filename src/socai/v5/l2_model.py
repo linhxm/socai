@@ -174,7 +174,9 @@ def _industry_from_data(shop: Shop, industries: list[str]) -> str | None:
     distinct = {(t.sql, c.sql): c.distinct for t in shop.tables.values() for c in t.cols}
     best, score = None, 0.0
     for ind in industries:
-        phrase = " ".join([w for w in fold(ind).split() if w not in generic] or fold(ind).split())
+        words = [w for w in fold(ind).split() if w not in generic]
+        # một từ đặc trưng dễ trùng nghĩa khác ("thuốc" ~ "thuộc tính" khi bỏ dấu): giữ nguyên cả tên ngành
+        phrase = " ".join(words) if len(words) >= 2 else fold(ind)
         hits: dict = {}
         for k, refs in shop.index.items():
             if f" {phrase} " in f" {k} ":

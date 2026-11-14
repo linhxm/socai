@@ -109,5 +109,6 @@ def parse_rules(text: str) -> Rules:
     return Rules(cards, industries, idf, sum(sum(c.toks.values()) for c in cards) / n)
 
 
-def load_rules(path: Path) -> Rules:
+def load_rules(path: Path | str) -> Rules:
+    path = Path(path)
     return parse_rules(path.read_text(encoding="utf-8")) if path.exists() else Rules([], [])

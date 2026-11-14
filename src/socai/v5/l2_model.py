@@ -165,6 +165,28 @@ def _industry(intro: str, industries: list[str]) -> str | None:
     return best
 
 
+def _industry_from_data(shop: Shop, industries: list[str]) -> str | None:
+    """README POS thường không nêu ngành → đoán từ tên bảng/cột (thong_tin_thuoc) hoặc từ một cột chữ (tên hàng,
+    nhóm hàng) có ≥ 10% giá trị chứa tên ngành. Quán tạp hoá bán vài loại cà phê gói không vượt ngưỡng này."""
+    generic = {"cua", "hang", "tiem", "quan", "shop", "nha", "va", "ban", "dai", "ly"}
+    names = " ".join(f"{t.sql} {t.orig} " + " ".join(f"{c.sql} {c.orig}" for c in t.cols) for t in shop.tables.values())
+    names = f" {fold(names.replace('_', ' '))} "
+    distinct = {(t.sql, c.sql): c.distinct for t in shop.tables.values() for c in t.cols}
+    best, score = None, 0.0
+    for ind in industries:
+        phrase = " ".join([w for w in fold(ind).split() if w not in generic] or fold(ind).split())
+        hits: dict = {}
+        for k, refs in shop.index.items():
+            if f" {phrase} " in f" {k} ":
+                for t, c, _ in refs:
+                    hits[(t, c)] = hits.get((t, c), 0) + 1
+        share = max([n / max(distinct.get(tc, 1), 1) for tc, n in hits.items()] or [0.0])
+        sc = (1.0 if f" {phrase} " in names else 0.0) + (share if share >= 0.1 else 0.0)
+        if sc > score:
+            best, score = ind, sc
+    return best
+
+
 def build_shop(biz: str, readme: Readme, tables: list[Table], industries: list[str] | None = None) -> Shop:
     con = duckdb.connect(":memory:")
     con.execute("SET threads TO 4")
@@ -194,6 +216,8 @@ def build_shop(biz: str, readme: Readme, tables: list[Table], industries: list[s
                 k = fold(v)
                 if len(k) >= 2:
                     shop.index.setdefault(k, []).append((t.sql, c.sql, v))
+    if shop.industry is None:
+        shop.industry = _industry_from_data(shop, industries or [])
     return shop
 
 
@@ -202,7 +226,12 @@ def render_table(t: TableInfo, brief: bool = False) -> str:
     if t.notes:
         head += "\n  ghi chú: " + "; ".join(t.notes[:6])
     lines = [head]
+    empty = [c.sql for c in t.cols if c.nulls >= 1.0]
+    if empty:
+        lines.append("  cột rỗng hoàn toàn (bỏ qua): " + ", ".join(empty))
     for c in t.cols:
+        if c.nulls >= 1.0:
+            continue
         s = f'  {c.sql} {c.type} — "{c.orig}"'
         if c.desc:
             s += f": {c.desc[:140]}"

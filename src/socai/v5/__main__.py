@@ -131,7 +131,8 @@ def main(argv: list[str] | None = None) -> None:
         rules = load_rules(a.data / "rulebook.md")
         readme, tables = read_shop(a.data / "data" / a.shop)
         shop = build_shop(a.shop, readme, tables, rules.industries)
-        print(f"ngành: {shop.industry} · dữ liệu: {shop.date_range} · {len(shop.index)} khoá giá trị")
+        dr = " → ".join(shop.date_range) if shop.date_range else "-"
+        print(f"ngành: {shop.industry or '-'} · dữ liệu: {dr} · {len(shop.index)} khoá giá trị")
         for t in shop.tables.values():
             print(render_table(t), "\n")
 

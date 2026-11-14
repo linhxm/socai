@@ -260,3 +260,25 @@ def test_v2_clean_tables_load_into_duckdb(split):
     assert "ban" in shop.tables and {"ngay", "trang_thai", "thanh_tien"} <= {c.sql for c in shop.tables["ban"].cols}
     cols, rows = run_sql(shop.con, "SELECT sum(thanh_tien) FROM ban WHERE trang_thai IN ('hoàn thành', 'đang giao')")
     assert rows[0][0] > 0 and any("trang_thai IN" in n for n in shop.tables["ban"].notes)
+
+
+def test_real_data_fixes(tmp_path):
+    """Lỗi thấy khi chạy trên train thật: SĐT/địa chỉ bị đọc thành số, file tách 2 phần, mô tả cột lấy nhầm bảng,
+    ngành không nêu trong README."""
+    from socai.v5.l1_read import infer_kind
+    from socai.v5.l2_model import _industry_from_data
+
+    assert infer_kind("DiaChiLienHe", "", ["126 Lê Đức Thọ", "5 Hàng Bài", "12 Nguyễn Trãi"] * 10, [None] * 30) == "text"
+    assert infer_kind("LienHe", "", ["0912345678", "0987654321", "0321555888"] * 10, [None] * 30) == "text"
+    d = tmp_path / "biz_x"
+    d.mkdir()
+    (d / "README.md").write_text("# Dữ liệu biz_x\n\nFile máy POS xuất ra.\n\n## Cột trong `NhapHang.csv`\n"
+                                 "- **Đơn giá**: giá nhập một đơn vị\n", encoding="utf-8")
+    (d / "ChiTiet_1.csv").write_text("Mã,Món,Đơn giá\nA1,Cà phê sữa,25000\nA2,Bạc xỉu,30000\n", encoding="utf-8")
+    (d / "ChiTiet_2.csv").write_text("Mã,Món,Đơn giá\nA3,Cà phê đen,20000\nA4,Trà đào,35000\n", encoding="utf-8")
+    readme, tables = read_shop(d)
+    assert len(tables) == 1 and len(tables[0].df) == 4 and "gộp 2 file" in tables[0].notes[0]
+    assert all(c.desc != "giá nhập một đơn vị" for c in tables[0].cols)
+    shop = build_shop("biz_x", readme, tables, ["Cà phê", "Nhà thuốc", "Vật liệu xây dựng"])
+    assert shop.industry == "Cà phê"
+    assert _industry_from_data(shop, ["Nhà thuốc"]) is None

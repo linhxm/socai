@@ -20,7 +20,7 @@ from socai.profile.readme import Readme, load_readme
 
 SAMPLE = 2000
 RE_CODE = re.compile(r"\b(ma|id|so hd|so hoa don|so phieu|so don|sdt|so dien thoai|dien thoai|imei|serial|bien so|"
-                     r"ma vach|barcode|code|phone)\b")
+                     r"ma vach|barcode|code|phone|dia chi|address|mst|ma so thue|cmnd|cccd|so tai khoan|stk)\b")
 RE_DATE = re.compile(r"\b(ngay|date|han|thoi gian|thoi diem|time|luc)\b")
 RE_TIME = re.compile(r"\b(gio|time|luc|thoi gian|thoi diem)\b")
 RE_TOTAL = re.compile(r"^(tong|cong|tong cong|total|sum|subtotal)\b")
@@ -60,7 +60,7 @@ def infer_kind(name: str, desc: str, values: list, years: list) -> str:
     """Kiểu cột suy từ dữ liệu; tên và mô tả chỉ dùng để phân xử chỗ mơ hồ (số nguyên là mã hay ngày serial)."""
     if not values:
         return "text"
-    hint = fold(f"{name} {desc}")
+    hint = fold(re.sub(r"(?<=[a-z])(?=[A-Z])", " ", f"{name} {desc}"))  # DiaChiLienHe → dia chi lien he
     n = len(values)
     if all(isinstance(v, datetime) for v in values):
         return "datetime" if any(v.time() != time() for v in values) else "date"
@@ -73,10 +73,13 @@ def infer_kind(name: str, desc: str, values: list, years: list) -> str:
             return "datetime" if with_time >= 0.2 else "date"
     if code:
         return "text"
+    if sum(isinstance(v, str) and len(v) > 1 and v[0] == "0" and v.strip().isdigit() for v in values) / n >= 0.3:
+        return "text"  # số có số 0 đứng đầu (điện thoại, mã): giữ nguyên chuỗi
     if sum(parse_number(v) is not None for v in values) / n >= 0.95:
         return "number"
-    if sum(parse_qty(v)[0] is not None for v in values) / n >= 0.95 and \
-            sum(bool(parse_qty(v)[1]) for v in values) / n >= 0.5:
+    units = [parse_qty(v) for v in values]
+    if sum(q is not None for q, _ in units) / n >= 0.95 and sum(bool(u) for _, u in units) / n >= 0.5 and \
+            sum(len(str(u).split()) <= 2 for _, u in units if u) / max(sum(bool(u) for _, u in units), 1) >= 0.9:
         return "qty"
     if RE_TIME.search(hint) and sum(parse_time(v) is not None for v in values) / n >= 0.9:
         return "time"
@@ -198,6 +201,44 @@ def _fill_groups(df: pd.DataFrame, cols: list[Col]) -> list[str]:
     return filled
 
 
+def _stem(name: str) -> str:
+    """'DanhSachHoaDonChiTiet_2.xlsx::Sheet1' → 'danhsachhoadonchitiet' (bỏ đuôi file, số thứ tự file tách)."""
+    s = re.sub(r"\.[A-Za-z0-9]+$", "", name.split("::")[0])
+    return re.sub(r"[ _\-]*\(?\d{1,2}\)?$", "", fold(s)).replace(" ", "")
+
+
+def _describe(readme: Readme, raw: RawTable, column: str) -> str:
+    """Mô tả cột từ mục README của CHÍNH bảng này. Không đoán từ bảng khác: README của POS hay có cột cùng tên
+    (Đơn giá) ở bảng bán và bảng nhập với nghĩa khác nhau."""
+    own = {fold(k).replace(" ", "") for k in [raw.name, raw.name.split("::")[-1], *raw.sheets]}
+    own |= {re.sub(r"[_\-]+", "", fold(k)).replace(" ", "") for k in own} | {_stem(raw.name)}
+    for key, cols in readme.columns.items():
+        if column in cols and ({fold(key).replace(" ", ""), _stem(key), _stem(key.split("::")[-1])} & own):
+            return cols[column]
+    return readme.notes.get(column) or ""
+
+
+def _merge_split(tables: list[Table]) -> list[Table]:
+    """File bị tách vì giới hạn dòng (ChiTiet_1, ChiTiet_2 cùng cột) → một bảng."""
+    groups: dict[tuple, list[Table]] = {}
+    for t in tables:
+        groups.setdefault((_stem(t.name), tuple(c.name for c in t.cols)), []).append(t)
+    out = []
+    for (_, _), ts in groups.items():
+        if len(ts) == 1 or not re.search(r"\d\)?$", re.sub(r"\.[A-Za-z0-9]+$", "", ts[-1].name.split("::")[0])):
+            out.extend(ts)
+            continue
+        first = ts[0]
+        df = pd.concat([t.df for t in ts], ignore_index=True)
+        notes = [f"gộp {len(ts)} file tách của cùng một bảng: " + ", ".join(t.name for t in ts)]
+        notes += [n for t in ts for n in t.notes if not n.startswith("có ") or "dòng trùng" not in n]
+        dup = int(df.duplicated().sum())
+        if dup:
+            notes.append(f"có {dup} dòng trùng hệt dòng khác (chưa bỏ; xem luật trước khi quyết định)")
+        out.append(Table(first.name, first.file, df, first.cols, notes, min(t.confidence for t in ts)))
+    return out
+
+
 def clean_table(raw: RawTable, readme: Readme) -> Table | None:
     df = raw.df.copy()
     names = [c for c in df.columns if not str(c).startswith("_")]
@@ -212,7 +253,7 @@ def clean_table(raw: RawTable, readme: Readme) -> Table | None:
     cols: list[Col] = []
     data: dict[str, list] = {}
     for name in names:
-        desc = readme.describe(raw.name, name, raw.sheets) or ""
+        desc = _describe(readme, raw, name)
         nonblank = [(v, (years.iloc[i] if years is not None else None)) for i, v in enumerate(df[name].tolist())
                     if not is_blank(v)]
         step = max(1, len(nonblank) // SAMPLE)
@@ -263,7 +304,7 @@ def read_shop(biz_dir: Path, cache: Path | None = None) -> tuple[Readme, list[Ta
             t = clean_table(raw, readme)
             if t is not None and len(t.df):
                 tables.append(t)
-    return readme, tables
+    return readme, _merge_split(tables)
 
 
 V2_KIND = {"money": "number", "num": "number", "hour": "number", "qty": "number", "date": "date"}

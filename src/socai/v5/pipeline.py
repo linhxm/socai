@@ -115,7 +115,8 @@ def answer_question(q: dict, shop: Shop, rules: Rules, cal: LunarCalendar | None
         output = [s.get("answer") or s.get("error") for s in samples]
     log.update({
         "answer": final, "elapsed_ms": int((time.perf_counter() - t0) * 1000),
-        "thinking": thinking if len(thinking) > 1 else (thinking[0] if thinking else None),
+        # Hướng dẫn BTC: null khi mô hình không sinh reasoning (chế độ suy nghĩ tắt), danh sách theo thứ tự gọi khi có
+        "thinking": None if not any(thinking) else (thinking if len(thinking) > 1 else thinking[0]),
         "code": code, "output": output, "decision": decision, "samples": samples,
         "inputs": {"periods": [[str(p.start), str(p.end), p.kind] for p in ask.time.periods],
                    "compare_to": [str(ask.time.compare_to.start), str(ask.time.compare_to.end)]

@@ -9,6 +9,7 @@ Hai thứ này là dữ liệu cuộc thi nên không đưa lên GitHub. Dữ li
 | `run_finetune.py` (mặc định) | Fine-tune LoRA Qwen3-4B rồi đo, so với bản gốc ([mục cuối](#fine-tune-lora-run_finetunepy)) | ~4–5 giờ |
 | `run_14b.py` | Đo Qwen3-14B trên 120 câu hold-out | ~1 giờ |
 | `run_v4.py` | Chạy v4 (L1→L6, docs/v4.md) với Qwen3-14B: mặc định 6 shop hold-out train × `V4_LIMIT` câu; `V4_SPLIT=public` nếu đã gắn public_test; `V4_ARGS` thêm tham số (vd `--samples 3`) | ~1–2 giờ |
+| `run_v5.py` | Chạy v5 (docs/v5.md) với Qwen3-14B. `V5_SPLIT=public`: dựng ngân hàng ví dụ từ shop dev train → v2 trên public → v5 trên public (`--base v2 --verify`), cùng `V5_LIMIT` câu đầu mỗi shop; gắn `socai-data` + `socai-public`; chấm trên máy | ~5–6 giờ (20 câu/shop) |
 | `build_llama.py` | Chỉ dựng `llama-server` để dành (chạy một lần) | ~35 phút |
 
 ## Chuẩn bị (một lần)

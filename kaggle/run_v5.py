@@ -191,6 +191,10 @@ def main() -> None:
             build_bank(out / "logs" / "log.jsonl")
     for p in servers:
         p.terminate()
+    # Output Kaggle = cả /kaggle/working: bỏ GGUF (~9 GB), dữ liệu giải nén, cache và thư mục chứa symlink để tải về nhanh
+    for d in (W / "models", W / "inputs", W / "cache", W / "cache_v2", W / "train_dev", W / "public_sub",
+              out / "v2" / "split0", out / "v2" / "split1"):
+        shutil.rmtree(d, ignore_errors=True)
     log(f"XONG · {time.time() - T0:.0f}s")
 
 

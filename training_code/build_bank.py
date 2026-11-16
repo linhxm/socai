@@ -4,7 +4,7 @@ Cách làm: LLM (cùng mô hình lúc suy luận) viết biểu thức cho từn
 đáp án chuẩn; CHỈ biểu thức ra đúng mới vào ngân hàng. Khi làm câu của shop X, ví dụ truy hồi không lấy từ X.
 Chạy nhiều vòng thì vòng sau có nhiều ví dụ hơn nên làm được thêm câu.
 
-    python training_code/build_bank.py --train ../train --out src/socai/v2/bank.json \
+    python training_code/build_bank.py --train local/train --out src/socai/v2/bank.json \
         --llm http://127.0.0.1:8088/v1 --exclude-biz biz_105,biz_111 [--seed kết_quả_cũ.json] [--limit N]
 """
 

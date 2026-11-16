@@ -1,6 +1,6 @@
-"""python -m socai.v4 predict --data ../public_test --out runs/v4 --llm http://127.0.0.1:8088/v1
-   python -m socai.v4 eval --pred runs/v4/submission.jsonl --ref ../submission.jsonl [--questions ../public_test/questions.jsonl]
-   python -m socai.v4 shop --data ../public_test --shop dev_001 [--llm URL]   # chỉ dựng L1 + L2, in danh mục bảng
+"""python -m socai.v4 predict --data local/public_test --out runs/v4 --llm http://127.0.0.1:8088/v1
+   python -m socai.v4 eval --pred runs/v4/submission.jsonl --ref local/submission.jsonl [--questions local/public_test/questions.jsonl]
+   python -m socai.v4 shop --data local/public_test --shop dev_001 [--llm URL]   # chỉ dựng L1 + L2, in danh mục bảng
 """
 
 from __future__ import annotations

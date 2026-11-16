@@ -5,3 +5,4 @@
 runs/
 *.tar
 *.tar.gz
+local/

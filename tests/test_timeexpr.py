@@ -61,7 +61,7 @@ def test_chinese_and_english_months():
     assert span("How many orders in 3/2025?") == ("2025-03-01", "2025-03-31")
 
 
-CAL = Path(__file__).resolve().parents[2] / "train" / "calendar.csv"
+CAL = Path(__file__).resolve().parents[1] / "local" / "train" / "calendar.csv"
 
 
 @pytest.mark.skipif(not CAL.exists(), reason="cần train/calendar.csv")

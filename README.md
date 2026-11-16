@@ -78,23 +78,23 @@ What these numbers say:
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                       # real-data tests are skipped when ../train is absent
+pytest -q                       # real-data tests are skipped when local/train is absent
 
 # v1/v2 rule path only (no GPU)
-python -m socai eval --split ../train --out runs/train --no-llm
+python -m socai eval --split local/train --out runs/train --no-llm
 
 # with an LLM: any OpenAI-compatible server (llama.cpp or vLLM) serving Qwen3
 # e.g. llama.cpp on a 4 GB GPU:
 #   llama-server -m Qwen3-4B-Q4_K_M.gguf -ngl 99 -fa on -c 4096 --jinja --port 8088 -np 1 --seed 0
-SOCAI_LLM_URL=http://127.0.0.1:8088/v1 python -m socai predict --data ../public_test --out runs/v2   # v2
+SOCAI_LLM_URL=http://127.0.0.1:8088/v1 python -m socai predict --data local/public_test --out runs/v2   # v2
 
-python -m socai.v4 predict --data ../public_test --out runs/v4 --llm http://127.0.0.1:8088/v1        # v4
-python -m socai.v5 predict --data ../public_test --out runs/v5 --llm http://127.0.0.1:8088/v1        # v5
-python -m socai.v5 shop --data ../train --shop <shop_id>        # inspect how v5 reads one shop (no LLM)
+python -m socai.v4 predict --data local/public_test --out runs/v4 --llm http://127.0.0.1:8088/v1        # v4
+python -m socai.v5 predict --data local/public_test --out runs/v5 --llm http://127.0.0.1:8088/v1        # v5
+python -m socai.v5 shop --data local/train --shop <shop_id>        # inspect how v5 reads one shop (no LLM)
 
 # utilities
-python -m socai profile --biz ../train/data/<shop_id>
-python -m socai rulebook-diff ../train/rulebook.md ../public_test/rulebook.md
+python -m socai profile --biz local/train/data/<shop_id>
+python -m socai rulebook-diff local/train/rulebook.md local/public_test/rulebook.md
 python -m socai synth --out /tmp/synth --n-biz 3 --render-images
 ```
 
@@ -143,6 +143,6 @@ tests/         unit and end-to-end tests (fake LLM, synthetic and real data)
 ```
 
 ## Not in this repository
-- **Data:** the training, public, and private splits are not published.
+- **Data:** the training, public, and private splits are not published. Locally they live in `local/` (`local/train`, `local/public_test`), which is git- and docker-ignored.
 - **Generated example banks** (`bank.json`) and fine-tuning data: they contain training questions.
 - **Model weights:** download them from the official sources at the revisions above.

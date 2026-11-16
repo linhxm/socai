@@ -19,7 +19,8 @@ models/
 *.tar
 *.tar.gz
 
-# Dữ liệu cuộc thi (KHÔNG được đưa lên repo)
+# Dữ liệu cuộc thi (KHÔNG được đưa lên repo). local/ chứa train/, public_test/, bộ đáp án và tài liệu đóng gói
+local/
 train/
 public_test/
 private_test/

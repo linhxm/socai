@@ -11,7 +11,7 @@ from socai.profile.business import load_business
 from socai.rules.timeexpr import Period
 from socai.semantic.canonical import build
 
-TRAIN = Path(__file__).resolve().parents[2] / "train" / "data"
+TRAIN = Path(__file__).resolve().parents[1] / "local" / "train" / "data"
 pytestmark = pytest.mark.skipif(not TRAIN.exists(), reason="cần dữ liệu train của BTC")
 
 

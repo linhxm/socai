@@ -4,7 +4,7 @@ Bắt lỗi gán nghĩa/đọc file trước khi chúng làm sai hàng loạt c�
 nghĩa, dòng rơi vì không đọc được ngày, trạng thái không quy về 4 loại (§8), ô tiền/số lượng hỏng, tổng dòng lệch
 tổng đơn, và shop có những loại thông tin nào rulebook nhắc tới (để biết câu nào `unanswerable`).
 
-    PYTHONPATH=src python scripts/audit_shops.py --split ../train --cache /tmp/cache --out audit.json [--shops biz_101,...]
+    PYTHONPATH=src python scripts/audit_shops.py --split local/train --cache /tmp/cache --out audit.json [--shops biz_101,...]
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """Đo hold-out đúng cách chạy thật (đường luật → v2 → chính sách), có hạn giờ; dùng cho mọi mô hình.
 
-    PYTHONPATH=src python scripts/eval_holdout.py --train ../train --llm http://127.0.0.1:8088/v1 \
+    PYTHONPATH=src python scripts/eval_holdout.py --train local/train --llm http://127.0.0.1:8088/v1 \
         --out runs/h_14b_bank.json --n-per-shop 20 --deadline-min 60 [--no-bank]
 
 Ghi sau MỖI câu (dừng giữa chừng vẫn còn kết quả). Mỗi dòng có cả đáp án cuối (sau ngưỡng) lẫn phán xét của

@@ -2,7 +2,7 @@
 bộ trả lời ghi sẵn), so với đáp án chuẩn. Không cần GPU. Dùng làm phép thử hồi quy cho mọi sửa đổi tầng dữ liệu/view:
 trước khi sửa mọi biểu thức đều ra đúng, sau khi sửa câu nào hỏng là sửa đó làm hỏng.
 
-    PYTHONPATH=src python scripts/replay_bank.py --train ../train --cache /tmp/cache [--shops biz_121,biz_122] [--out f.json]
+    PYTHONPATH=src python scripts/replay_bank.py --train local/train --cache /tmp/cache [--shops biz_121,biz_122] [--out f.json]
 """
 
 from __future__ import annotations

@@ -12,7 +12,7 @@ truy hồi) → user (câu hỏi) → assistant (biểu thức đã chạy ra đ
 - Đích được chuẩn hoá bằng `lint` (như lúc chạy); `Bank` đã ghi `$ky_so` ngoài vế so sánh thành `$ky`.
 - Chia train/val THEO SHOP. 6 shop hold-out không có trong ngân hàng nên không bao giờ vào đây.
 
-    PYTHONPATH=src python training_code/export_finetune.py --train ../train --bank src/socai/v2/bank.json \
+    PYTHONPATH=src python training_code/export_finetune.py --train local/train --bank src/socai/v2/bank.json \
         --out training_code/data/finetune --val-biz biz_109,biz_124
 """
 
